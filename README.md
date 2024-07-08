@@ -11,6 +11,25 @@ N2B (Natural to Bash) is a Ruby gem that converts natural language instructions 
 - Shell history integration
 - Command history tracking for improved context
 
+## Quick Example
+´´´
+n2b init a new github repo called abc, add local files, transmit
+´´´
+
+results in 
+´´´
+Translated /bin/zsh Commands:
+------------------------
+git init
+git remote add origin https://github.com/yourusername/abc.git
+git add .
+git commit -m 'Initial commit'
+git push -u origin main
+------------------------
+Explanation:
+These commands initialize a new Git repository, add a remote GitHub repository named 'abc', stage all local files, create an initial commit, and push the changes to GitHub. Replace 'yourusername' with your actual GitHub username. Note that you'll need to create the repository on GitHub first before running these commands. Also, ensure you have Git installed and configured with your GitHub credentials.
+´´´
+------------------------
 ## Installation
 
 Install the gem by running:
