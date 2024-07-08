@@ -44,15 +44,15 @@ Examples:
 
 1. Generate commands without executing:
 
-n2b list all PDF files in the current directory
+```n2b list all PDF files in the current directory ```
 
 2. Generate and execute commands:
 
-n2b -x create a new directory named 'project' and initialize a git repository in it
+```n2b -x create a new directory named 'project' and initialize a git repository in it ```
 
 3. Reconfigure the tool:
 
-n2b -c 
+```n2b -c  ```
 
 ## How It Works
 
