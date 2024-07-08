@@ -68,7 +68,7 @@ module N2B
       api_key = ENV['CLAUDE_API_KEY'] || config['access_key']
       model = config['model'] || 'sonnet35'
       if api_key.nil? || api_key == '' ||  reconfigure
-        print "Enter your Claude API key: #{ api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"
+        print "Enter your Claude API key: #{ api_key.nil? || api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"
         api_key = $stdin.gets.chomp 
         api_key = config['access_key'] if api_key.empty?
         print "Choose a model (haiku, sonnet, sonnet35 (default)): "
