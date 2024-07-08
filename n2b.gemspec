@@ -11,6 +11,11 @@ Gem::Specification.new do |spec|
   spec.summary       = %q{Convert natural language to bash commands}
   spec.description   = %q{A tool to convert natural language instructions to bash commands using Claude API}
   spec.homepage      = "https://github.com/stefan-kp/n2b"
+  spec.metadata      = {
+    "homepage_uri" => "https://github.com/stefan-kp/n2b",
+    "source_code_uri" => "https://github.com/stefan-kp/n2b",
+    "changelog_uri" => "https://github.com/stefan-kp/n2b/blob/main/CHANGELOG.md"
+  }
   spec.license       = "MIT"
 
   spec.files         = Dir.glob("{bin,lib}/**/*") + %w(README.md)
