@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+
+require "n2b"
+
+N2B::CLI.run(ARGV)
