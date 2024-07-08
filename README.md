@@ -12,12 +12,13 @@ N2B (Natural to Bash) is a Ruby gem that converts natural language instructions 
 - Command history tracking for improved context
 
 ## Quick Example
-´´´
+
+```
 n2b init a new github repo called abc, add local files, transmit
-´´´
+```
 
 results in 
-´´´
+```
 Translated /bin/zsh Commands:
 ------------------------
 git init
@@ -28,7 +29,7 @@ git push -u origin main
 ------------------------
 Explanation:
 These commands initialize a new Git repository, add a remote GitHub repository named 'abc', stage all local files, create an initial commit, and push the changes to GitHub. Replace 'yourusername' with your actual GitHub username. Note that you'll need to create the repository on GitHub first before running these commands. Also, ensure you have Git installed and configured with your GitHub credentials.
-´´´
+```
 ------------------------
 ## Installation
 
@@ -84,11 +85,17 @@ Examples:
 ## Privacy
 
 N2B allows you to configure what information is sent to the Claude API:
-- Shell history
-- Past n2b requests and responses
-- Current working directory
+- Shell history / probably not needed, I added the option to give the llm more context
+- Past n2b requests and responses / probably not needed, I added the option to give the llm more context
+- Current working directory / recommended
 
 You can adjust these settings during configuration.
+
+Always sent to llm
+- prompt
+- shell type 
+- operating system
+
 
 ## Limitations
 
