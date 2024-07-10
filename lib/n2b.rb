@@ -109,7 +109,7 @@ module N2B
     
     def read_llm_history_file
       history = File.read(HISTORY_FILE) if File.exist?(HISTORY_FILE)
-      history || ''
+      history ||= ''
       # limit to 20 most recent commands
       history.split("\n").last(20).join("\n")
     end
