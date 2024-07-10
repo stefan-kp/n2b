@@ -1,19 +1,19 @@
 # lib/n2b.rb
-require "n2b/version"
 require 'net/http'
 require 'uri'
 require 'json'
 require 'optparse'
 require 'yaml'
 require 'fileutils'
-
+require 'n2b/version'
+require 'n2b/llm/claude'
+require 'n2b/llm/open_ai'
 module N2B
   class Error < StandardError; end
 
   CONFIG_FILE = File.expand_path('~/.n2b/config.yml')
   HISTORY_FILE = File.expand_path('~/.n2b/history')
-  MODELS = { 'haiku' =>  'claude-3-haiku-20240307', 'sonnet' => 'claude-3-sonnet-20240229', 'sonnet35' => 'claude-3-5-sonnet-20240620' }
-
+  
   class CLI
     def self.run(args)
       new(args).execute
@@ -67,27 +67,36 @@ module N2B
       config = load_config
       api_key = ENV['CLAUDE_API_KEY'] || config['access_key']
       model = config['model'] || 'sonnet35'
+  
       if api_key.nil? || api_key == '' ||  reconfigure
-        print "Enter your Claude API key: #{ api_key.nil? || api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"
+        print "choose a language model to use (claude, openai): "
+        llm = $stdin.gets.chomp
+        unless ['claude', 'openai'].include?(llm)
+          puts "Invalid language model. Choose from: claude, openai"
+          exit 1
+        end
+        llm_class = llm == 'openai' ? N2M::Llm::OpenAi : N2M::Llm::Claude
+
+        print "Enter your #{llm} API key: #{ api_key.nil? || api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"
         api_key = $stdin.gets.chomp 
         api_key = config['access_key'] if api_key.empty?
-        print "Choose a model (haiku, sonnet, sonnet35 (default)): "
+        print "Choose a model (#{ llm_class::MODELS.keys }, #{ llm_class::MODELS.keys.first } default): "
         model = $stdin.gets.chomp 
-        model = 'sonnet35' if model.empty?
-        config['llm'] ||= 'anthropic'
+        model = llm_class::MODELS.keys.first if model.empty?
+        config['llm'] = llm
         config['access_key'] = api_key
         config['model'] = model
-        unless MODELS.keys.include?(model)
-          puts "Invalid model. Choose from: #{MODELS.keys.join(', ')}"
+        unless llm_class::MODELS.keys.include?(model)
+          puts "Invalid model. Choose from: #{llm_class::MODELS.keys.join(', ')}"
           exit 1
         end
         
         config['privacy'] ||= {} 
-        print "Do you want to send your shell history to Claude? (y/n): "
+        print "Do you want to send your shell history to #{llm}? (y/n): "
         config['privacy']['send_shell_history'] = $stdin.gets.chomp == 'y'
-        print "Do you want to send your past requests and answers to Claude? (y/n): "
+        print "Do you want to send your past requests and answers to #{llm}? (y/n): "
         config['privacy']['send_llm_history'] = $stdin.gets.chomp == 'y'
-        print "Do you want to send your current directory to Claude? (y/n): "
+        print "Do you want to send your current directory to #{llm}? (y/n): "
         config['privacy']['send_current_directory'] = $stdin.gets.chomp == 'y'
         print "Do you want to append the commands to your shell history? (y/n): "
         config['append_to_shell_history'] = $stdin.gets.chomp == 'y'
@@ -115,11 +124,9 @@ module N2B
     end
     
     def call_llm(prompt, config)
-      uri = URI.parse('https://api.anthropic.com/v1/messages')
-      request = Net::HTTP::Post.new(uri)
-      request.content_type = 'application/json'
-      request['X-API-Key'] = config['access_key']
-      request['anthropic-version'] = '2023-06-01'
+      
+      llm = config['llm'] == 'openai' ?   N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
+      
       content = <<-EOF 
               Translate the following natural language command to bash commands: #{prompt}\n\nProvide only the #{get_user_shell} commands for #{ get_user_os }. the commands should be separated by newlines. 
               #{' the user is in directory'+Dir.pwd if config['privacy']['send_current_directory']}. 
@@ -130,34 +137,9 @@ module N2B
               { "commands": [ "echo 'Hello, World!'" ], "explanation": "This command prints 'Hello, World!' to the terminal."}
               EOF
     
-      request.body = JSON.dump({
-        "model" => MODELS[config['model']],
-        "max_tokens" => 1024,
-        "messages" => [
-          {
-            "role" => "user",
-            "content" => content 
-          }
-        ]
-      })
-    
-      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-        http.request(request)
-      end
-      # check for errors
-      if response.code != '200'
-        puts "Error: #{response.code} #{response.message}"
-        puts response.body
-        exit 1
-      end
-      answer = JSON.parse(response.body)['content'].first['text'] 
-      begin 
-        # removee everything before the first { and after the last }
-        answer = answer.sub(/.*\{(.*)\}.*/m, '{\1}')
-        answer = JSON.parse(answer)
-      rescue JSON::ParserError
-        answer = { 'commands' => answer.split("\n"), explanation: answer}
-      end
+     
+      answer = llm.make_request(content)
+
       append_to_llm_history_file("#{prompt}\n#{answer}")
       answer
     end

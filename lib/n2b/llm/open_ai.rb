@@ -37,7 +37,6 @@ module N2M
           puts response.body
           exit 1
         end
-        puts JSON.parse(response.body)
         answer = JSON.parse(response.body)['choices'].first['message']['content']
         begin
           # remove everything before the first { and after the last }
