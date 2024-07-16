@@ -1,11 +1,12 @@
 # N2B: Natural Language to Bash Commands Converter
 
-N2B (Natural to Bash) is a Ruby gem that converts natural language instructions into executable shell commands using the Claude AI API. It's designed to help users quickly generate shell commands without needing to remember exact syntax.
+N2B (Natural to Bash) is a Ruby gem that converts natural language instructions into executable shell commands using the Claude AI or OpenAI API. It's designed to help users quickly generate shell commands without needing to remember exact syntax.
 
 ## Features
 
 - Convert natural language to shell commands
 - Support for multiple Claude AI models (Haiku, Sonnet, Sonnet 3.5)
+- Support for OpenAI models
 - Option to execute generated commands directly
 - Configurable privacy settings
 - Shell history integration
