@@ -153,7 +153,7 @@ module N2B
       answer = JSON.parse(response.body)['content'].first['text'] 
       begin 
         # removee everything before the first { and after the last }
-        answer = answer.sub(/.*\{(.*)\}.*/m, '{\1}')
+        answer = answer.sub(/.*\{(.*)\}.*/m, '{\1}') unless answer.start_with?('{')
         answer = JSON.parse(answer)
       rescue JSON::ParserError
         answer = { 'commands' => answer.split("\n"), explanation: answer}

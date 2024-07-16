@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Stefan Nothegger"]
   spec.email         = ["stefan@kaproblem.com"]
   spec.summary       = %q{Convert natural language to bash commands}
-  spec.description   = %q{A tool to convert natural language instructions to bash commands using Claude API}
+  spec.description   = %q{A tool to convert natural language instructions to bash commands using Claude API or OpenAI's GPT.}
   spec.homepage      = "https://github.com/stefan-kp/n2b"
   spec.metadata      = {
     "homepage_uri" => "https://github.com/stefan-kp/n2b",
