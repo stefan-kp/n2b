@@ -18,12 +18,15 @@ module N2B
       model = config['model'] || 'sonnet35'
   
       if api_key.nil? || api_key == '' ||  reconfigure
-        print "choose a language model to use (claude, openai): "
+        print "choose a language model to use (1:claude, 2:openai) #{ config['llm'] }: "
         llm = $stdin.gets.chomp
-        unless ['claude', 'openai'].include?(llm)
+        llm = config['llm'] if llm.empty?
+        unless ['claude', 'openai','1','2'].include?(llm)
           puts "Invalid language model. Choose from: claude, openai"
           exit 1
         end
+        llm = 'claude' if llm == '1'
+        llm = 'openai' if llm == '2'
         llm_class = llm == 'openai' ? N2M::Llm::OpenAi : N2M::Llm::Claude
 
         print "Enter your #{llm} API key: #{ api_key.nil? || api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"

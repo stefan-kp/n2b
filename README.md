@@ -1,8 +1,11 @@
 # N2B: Natural Language to Bash Commands Converter
 
 N2B (Natural to Bash) is a Ruby gem that converts natural language instructions into executable shell commands using the Claude AI or OpenAI API. It's designed to help users quickly generate shell commands without needing to remember exact syntax.
+Also it has the n2r method which can help you with any Ruby or Rails related issues
 
 ## Features
+
+### N2B
 
 - Convert natural language to shell commands
 - Support for multiple Claude AI models (Haiku, Sonnet, Sonnet 3.5)
@@ -12,7 +15,13 @@ N2B (Natural to Bash) is a Ruby gem that converts natural language instructions 
 - Shell history integration
 - Command history tracking for improved context
 
-## Quick Example
+### N2R
+- Convert natural language to ruby code or explain it 
+- analyze an exception and find the cause
+- analyze existing ruby files
+ 
+
+## Quick Example N2B
 
 ```
 n2b init a new github repo called abc, add local files, transmit
@@ -31,6 +40,24 @@ git push -u origin main
 Explanation:
 These commands initialize a new Git repository, add a remote GitHub repository named 'abc', stage all local files, create an initial commit, and push the changes to GitHub. Replace 'yourusername' with your actual GitHub username. Note that you'll need to create the repository on GitHub first before running these commands. Also, ensure you have Git installed and configured with your GitHub credentials.
 ```
+
+## Quick example n2r 
+
+irb
+require 'n2b'
+n2r 4544 # results in exception
+n2r "what is the bug",exception:_
+
+result
+input_string.to_s.scan(/[\/\w.-]+\.rb(?=\s|:|$)/)
+
+Explanation 
+ The error `undefined method 'scan' for 7767:Integer` occurs because the method `scan` is being called on an integer instead of a string. To fix the issue, we need to ensure that `input_string` is a string before calling the `scan` method on it. Here's the corrected part of the code that converts `input_string` to a string before using `scan`:
+
+```ruby
+input_string.to_s.scan(/[\/\w.-]+\.rb(?=\s|:|$)/)
+```
+
 ------------------------
 ## Installation
 
@@ -74,6 +101,11 @@ Examples:
 3. Reconfigure the tool:
 
 ```n2b -c  ```
+
+
+n2r in ruby or rails console
+n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
+only question is mandatory
 
 ## How It Works
 

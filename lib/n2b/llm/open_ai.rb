@@ -6,7 +6,7 @@ module N2M
   module Llm
     class OpenAi
       API_URI = URI.parse('https://api.openai.com/v1/chat/completions')
-      MODELS = { 'gpt-4o' =>  'gpt-4o', 'gpt-35' => 'gpt-3.5-turbo-1106' }
+      MODELS = { 'gpt-4o' =>  'gpt-4o','gpt-4o-mini'=>'gpt-4o-mini', 'gpt-35' => 'gpt-3.5-turbo-1106' }
 
       def initialize(config)
         @config = config
