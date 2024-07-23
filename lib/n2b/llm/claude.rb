@@ -37,11 +37,22 @@ module N2M
         end
         answer = JSON.parse(response.body)['content'].first['text'] 
         begin 
-          # removee everything before the first { and after the last }
-          answer = answer.sub(/.*\{(.*)\}.*/m, '{\1}') unless answer.start_with?('{')
+          File.open('llm_response.json', 'w') do |f|
+            f.write(answer)
+          end
+          # remove everything before the first { and after the last }
+          
+          answer = answer.sub(/.*?\{(.*)\}.*/m, '{\1}') unless answer.start_with?('{')
+          # gsub all \n with \\n that are inside "
+          # 
+          answer.gsub!(/"([^"]*)"/) { |match| match.gsub(/\n/, "\\n") }
+          File.open('llm_response.json', 'w') do |f|
+            f.write(answer)
+          end
           answer = JSON.parse(answer)
         rescue JSON::ParserError
-          answer = { 'commands' => answer.split("\n"), explanation: answer}
+          puts "Error parsing JSON: #{answer}"
+          answer = { 'explanation' => answer}
         end
         answer
       end
