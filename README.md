@@ -43,14 +43,17 @@ These commands initialize a new Git repository, add a remote GitHub repository n
 
 ## Quick example n2r 
 
+```
 irb
 require 'n2b'
 n2r 4544 # results in exception
 n2r "what is the bug",exception:_
+```
 
 result
+```
 input_string.to_s.scan(/[\/\w.-]+\.rb(?=\s|:|$)/)
-
+```
 Explanation 
  The error `undefined method 'scan' for 7767:Integer` occurs because the method `scan` is being called on an integer instead of a string. To fix the issue, we need to ensure that `input_string` is a string before calling the `scan` method on it. Here's the corrected part of the code that converts `input_string` to a string before using `scan`:
 
