@@ -73,8 +73,8 @@ Before using n2b, you need to configure it with your Claude API key and preferen
 n2b -c
 
 This will prompt you to enter:
-- Your Claude API key
-- Preferred Claude model (haiku, sonnet, or sonnet35)
+- Your Claude API or OpenAI key
+- Preferred  model (e.g. haiku, sonnet, or sonnet35)
 - Privacy settings (whether to send shell history, past requests, current directory)
 - Whether to append generated commands to your shell history
 
