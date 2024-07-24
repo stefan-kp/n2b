@@ -110,6 +110,24 @@ n2r in ruby or rails console
 n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
 only question is mandatory
 
+N2B::IRB.n2r if no shortcut defined
+
+## Shortcut in rails console
+create an initializer 
+```
+# config/initializers/n2r.rb
+require 'n2b/irb' 
+Rails.application.config.after_initialize do
+
+  Object.include(Module.new do
+    def n2r(input_string = '', files: [], exception: nil, log: false)
+      N2B::IRB.n2r(input_string, files: files, exception: exception, log: log)
+    end
+  end)
+
+end
+```
+
 ## How It Works
 
 1. N2B takes your natural language input and sends it to the Claude AI API.

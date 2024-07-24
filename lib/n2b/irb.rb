@@ -1,7 +1,12 @@
 module N2B
-  module IRB
+  class IRB
     MAX_SOURCE_FILES = 4
-    def n2r(input_string='', files: [], exception: nil)
+
+    def self.n2r(input_string='', files: [], exception: nil, log: false)
+      new.n2r(input_string, files: files, exception: exception, log: log)
+    end
+
+    def n2r(input_string='', files: [], exception: nil, log: false)
       config = N2B::Base.new.get_config
       llm = config['llm'] == 'openai' ? N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
       # detect if inside rails console
@@ -26,9 +31,9 @@ module N2B
         source_files += exception.backtrace.map do |line|
           line.split(':').first
         end
-        input_string << ' ' << exception.message
+        input_string << ' ' << exception.message << "\m" << exception.backtrace.join(' ')
       end
-      source_files = source_files.reverse.sort_by do |file|
+      source_files = source_files.sort_by do |file|
         # Check if the file path starts with the current directory path
         if file.start_with?(Dir.pwd)
           0 # Prioritize files in or below the current directory
@@ -60,6 +65,12 @@ module N2B
         #{ "the user provided the following files: #{ file_content.collect{|k,v| "#{k}:#{v}" }.join("\n") }" if file_content }
         }}
       HEREDOC
+      if log
+        log_file_path = File.expand_path('~/.n2b/n2r.log')
+        File.open(log_file_path, 'a') do |file|
+          file.puts(content)
+        end
+      end
       @n2r_answers ||= []
       @n2r_answer = llm.make_request(content)
       @n2r_answers << { input: input_string, output: @n2r_answer }
@@ -74,5 +85,9 @@ module N2B
   end 
 end
 
-# Include the module in the main object if in console
-include N2B::IRB if defined?(IRB)
+# shortcut for IRB
+ if defined?(IRB)
+  def n2r(input_string = '', files: [], exception: nil)
+    N2B::IRB.n2r(input_string, files: files, exception: exception)
+  end
+end
