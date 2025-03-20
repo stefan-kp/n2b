@@ -447,6 +447,12 @@ module N2B
         # Display the ticket
         puts "Generated Scrum Ticket:"
         puts ticket
+
+        # Add reference section if URL is provided
+        if url
+          puts "\n## Reference"
+          puts "Errbit URL: #{url}"
+        end
       rescue => e
         puts "Error displaying ticket: #{e.message}"
         puts "Raw ticket data: #{ticket.inspect}"
