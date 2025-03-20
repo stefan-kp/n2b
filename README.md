@@ -13,22 +13,45 @@ N2B (Natural Language to Bash & Ruby) is a Ruby gem that leverages AI to convert
 
 ## Installation
 
-Add this line to your application's Gemfile:
+```bash
+gem install n2b
+```
+
+## Usage
+
+### In IRB/Rails Console
+
+First, require and extend the N2B module:
 
 ```ruby
-gem 'n2b'
+require 'n2b'
+extend N2B::IRB
 ```
 
-And then execute:
+For automatic loading in every IRB session, add these lines to your `~/.irbrc`:
 
-```bash
-$ bundle install
+```ruby
+require 'n2b'
+extend N2B::IRB
 ```
 
-Or install it yourself as:
+After loading, you can use the following commands:
 
-```bash
-$ gem install n2b
+- `n2r` - For general Ruby assistance
+- `n2rrbit` - For Errbit error analysis
+- `n2rscrum` - For generating Scrum tickets
+
+### Examples
+
+```ruby
+# Get help with a Ruby question
+n2r "How do I parse JSON in Ruby?"
+
+# Analyze an Errbit error
+n2rrbit(url: "your_errbit_url", cookie: "your_cookie")
+
+# Generate a Scrum ticket
+n2rscrum "Create a user authentication system"
 ```
 
 ## Configuration
@@ -44,29 +67,6 @@ openai:
   key: your-openai-api-key
   model: gpt-4 # or gpt-3.5-turbo
 ```
-
-## Usage
-
-### Convert Natural Language to Bash
-
-```ruby
-require 'n2b'
-
-# Convert a natural language instruction to a bash command
-N2B::Base.new.n2b("list all jpg files in the current directory")
-# => find . -name "*.jpg"
-```
-
-### Generate Ruby Code
-
-```ruby
-require 'n2b'
-
-# In an IRB console
-n2r("create a function that calculates fibonacci numbers")
-```
-
-This will output both the code and an explanation:
 
 ## Quick Example N2B
 

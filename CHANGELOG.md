@@ -6,3 +6,4 @@
 0.2.0 n2r Ruby helper
 0.2.1 converted to class, added logging possibility
 0.2.2 Added Errbit integration with n2rrbit and n2rscrum commands including request parameters analysis
+0.2.3 small bug fix
