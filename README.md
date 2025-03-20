@@ -1,25 +1,72 @@
-# N2B: Natural Language to Bash Commands Converter
+# N2B - Natural Language to Bash & Ruby
 
-N2B (Natural to Bash) is a Ruby gem that converts natural language instructions into executable shell commands using the Claude AI or OpenAI API. It's designed to help users quickly generate shell commands without needing to remember exact syntax.
-Also it has the n2r method which can help you with any Ruby or Rails related issues
+[![Gem Version](https://badge.fury.io/rb/n2b.svg)](https://badge.fury.io/rb/n2b)
+
+N2B (Natural Language to Bash & Ruby) is a Ruby gem that leverages AI to convert natural language instructions into bash commands and Ruby code.
 
 ## Features
 
-### N2B
+- Convert natural language to bash commands
+- Generate Ruby code from natural language instructions
+- Analyze Errbit errors and generate detailed reports
+- Create formatted Scrum tickets from errors
 
-- Convert natural language to shell commands
-- Support for multiple Claude AI models (Haiku, Sonnet, Sonnet 3.5)
-- Support for OpenAI models
-- Option to execute generated commands directly
-- Configurable privacy settings
-- Shell history integration
-- Command history tracking for improved context
+## Installation
 
-### N2R
-- Convert natural language to ruby code or explain it 
-- analyze an exception and find the cause
-- analyze existing ruby files
- 
+Add this line to your application's Gemfile:
+
+```ruby
+gem 'n2b'
+```
+
+And then execute:
+
+```bash
+$ bundle install
+```
+
+Or install it yourself as:
+
+```bash
+$ gem install n2b
+```
+
+## Configuration
+
+Create a config file at `~/.n2b/config.yml` with your API keys:
+
+```yaml
+llm: claude  # or openai
+claude:
+  key: your-anthropic-api-key
+  model: claude-3-opus-20240229 # or opus, haiku, sonnet
+openai:
+  key: your-openai-api-key
+  model: gpt-4 # or gpt-3.5-turbo
+```
+
+## Usage
+
+### Convert Natural Language to Bash
+
+```ruby
+require 'n2b'
+
+# Convert a natural language instruction to a bash command
+N2B::Base.new.n2b("list all jpg files in the current directory")
+# => find . -name "*.jpg"
+```
+
+### Generate Ruby Code
+
+```ruby
+require 'n2b'
+
+# In an IRB console
+n2r("create a function that calculates fibonacci numbers")
+```
+
+This will output both the code and an explanation:
 
 ## Quick Example N2B
 
@@ -168,3 +215,29 @@ This project is licensed under the MIT License.
 ## Support
 
 If you encounter any issues or have questions, please file an issue on the GitHub repository.
+
+### Generate Scrum Tickets from Errors
+
+Create well-formatted Scrum tickets from Errbit errors:
+
+```ruby
+require 'n2b'
+
+# Generate a Scrum ticket from an Errbit error
+n2rscrum(
+  url: "https://your-errbit-instance/apps/12345/problems/67890",
+  cookie: "your_errbit_session_cookie",
+  source_dir: "/path/to/your/app"   # Optional: source code directory
+)
+```
+
+The generated tickets include:
+- Clear title and description
+- Technical details with error context
+- Request parameters analysis
+- Root cause analysis
+- Suggested fixes with code examples
+- Acceptance criteria
+- Story point estimate
+- Priority level
+- Reference to the original Errbit URL
