@@ -17,7 +17,14 @@ module N2B
 
     def n2r(input_string='', files: [], exception: nil, log: false)
       config = N2B::Base.new.get_config
-      llm = config['llm'] == 'openai' ? N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
+      llm = case config['llm']
+            when 'openai'
+              N2M::Llm::OpenAi.new(config)
+            when 'gemini'
+              N2M::Llm::Gemini.new(config)
+            else
+              N2M::Llm::Claude.new(config)
+            end
       # detect if inside rails console
       console = case 
       when defined?(Rails) && Rails.respond_to?(:application)
@@ -586,7 +593,14 @@ module N2B
     
     def analyze_error(error_info, related_files)
       config = N2B::Base.new.get_config
-      llm = config['llm'] == 'openai' ? N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
+      llm = case config['llm']
+            when 'openai'
+              N2M::Llm::OpenAi.new(config)
+            when 'gemini'
+              N2M::Llm::Gemini.new(config)
+            else
+              N2M::Llm::Claude.new(config)
+            end
       
       # Build file content section, showing context if available
       file_content_section = related_files.map do |file_path, content|
@@ -651,7 +665,14 @@ module N2B
     
     def generate_error_ticket(error_info, related_files = {}, url = nil)
       config = N2B::Base.new.get_config
-      llm = config['llm'] == 'openai' ? N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
+      llm = case config['llm']
+            when 'openai'
+              N2M::Llm::OpenAi.new(config)
+            when 'gemini'
+              N2M::Llm::Gemini.new(config)
+            else
+              N2M::Llm::Claude.new(config)
+            end
       
       # Build file content section, showing context if available
       file_content_section = related_files.map do |file_path, content|

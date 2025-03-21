@@ -1,8 +1,8 @@
 module N2B
   class Base
 
-    CONFIG_FILE = File.expand_path('~/.n2b/config.yml')
-    HISTORY_FILE = File.expand_path('~/.n2b/history')
+    CONFIG_FILE = ENV['N2B_CONFIG_FILE'] || File.expand_path('~/.n2b/config.yml')
+    HISTORY_FILE = ENV['N2B_HISTORY_FILE'] || File.expand_path('~/.n2b/history')
 
     def load_config
       if File.exist?(CONFIG_FILE)
@@ -18,16 +18,24 @@ module N2B
       model = config['model'] || 'sonnet35'
   
       if api_key.nil? || api_key == '' ||  reconfigure
-        print "choose a language model to use (1:claude, 2:openai) #{ config['llm'] }: "
+        print "choose a language model to use (1:claude, 2:openai, 3:gemini) #{ config['llm'] }: "
         llm = $stdin.gets.chomp
         llm = config['llm'] if llm.empty?
-        unless ['claude', 'openai','1','2'].include?(llm)
-          puts "Invalid language model. Choose from: claude, openai"
+        unless ['claude', 'openai', 'gemini', '1', '2', '3'].include?(llm)
+          puts "Invalid language model. Choose from: claude, openai, gemini"
           exit 1
         end
         llm = 'claude' if llm == '1'
         llm = 'openai' if llm == '2'
-        llm_class = llm == 'openai' ? N2M::Llm::OpenAi : N2M::Llm::Claude
+        llm = 'gemini' if llm == '3'
+        llm_class = case llm
+                   when 'openai'
+                     N2M::Llm::OpenAi
+                   when 'gemini'
+                     N2M::Llm::Gemini
+                   else
+                     N2M::Llm::Claude
+                   end
 
         print "Enter your #{llm} API key: #{ api_key.nil? || api_key.empty? ? '' : '(leave blank to keep the current key '+api_key[0..10]+'...)' }"
         api_key = $stdin.gets.chomp 
@@ -50,11 +58,8 @@ module N2B
         config['append_to_shell_history'] = false 
         puts "Current configuration: #{config['privacy']}"
         FileUtils.mkdir_p(File.dirname(CONFIG_FILE)) unless File.exist?(File.dirname(CONFIG_FILE))
-        File.open(CONFIG_FILE, 'w+') do |f|
-          f.write(config.to_yaml   )
-        end
+        File.write(CONFIG_FILE, config.to_yaml)
       end
-      
       config
     end
   end

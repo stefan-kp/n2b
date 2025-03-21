@@ -8,6 +8,7 @@ require 'fileutils'
 require 'n2b/version'
 require 'n2b/llm/claude'
 require 'n2b/llm/open_ai'
+require 'n2b/llm/gemini'
 require 'n2b/base'
 require 'n2b/cli'
 

@@ -1,0 +1,30 @@
+# Ignore local config files
+GoogleConfig.yml
+.env
+.env.*
+
+# Ignore bundler config
+/.bundle
+
+# Ignore all of the generated files, since they are derived from the source
+/rdoc/
+
+# Ignore any keep files
+.keep
+
+# Ignore database files
+*.db
+*.sqlite3
+
+# Ignore log files
+*.log
+
+# Ignore temp files
+*.tmp
+*.temp
+
+# Ignore coverage reports
+/coverage/
+
+# Ignore rvm files
+.rvmrc 
