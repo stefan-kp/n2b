@@ -33,9 +33,7 @@ module N2M
 
         # check for errors
         if response.code != '200'
-          puts "Error: #{response.code} #{response.message}"
-          puts response.body
-          exit 1
+          raise N2B::LlmApiError.new("LLM API Error: #{response.code} #{response.message} - #{response.body}")
         end
         answer = JSON.parse(response.body)['choices'].first['message']['content']
         begin

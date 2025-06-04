@@ -35,10 +35,7 @@ module N2M
 
         # check for errors
         if response.code != '200'
-          puts "Error: #{response.code} #{response.message}"
-          puts response.body
-          puts "Config: #{@config.inspect}"
-          exit 1
+          raise N2B::LlmApiError.new("LLM API Error: #{response.code} #{response.message} - #{response.body}")
         end
 
         parsed_response = JSON.parse(response.body)
