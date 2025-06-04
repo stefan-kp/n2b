@@ -60,6 +60,40 @@ module N2M
         end
         answer
       end
+
+      def analyze_code_diff(prompt_content)
+        # This method assumes prompt_content is the full, ready-to-send prompt
+        # including all instructions for the LLM (system message, diff, user additions, JSON format).
+        uri = URI.parse('https://api.anthropic.com/v1/messages')
+        request = Net::HTTP::Post.new(uri)
+        request.content_type = 'application/json'
+        request['X-API-Key'] = @config['access_key']
+        request['anthropic-version'] = '2023-06-01'
+
+        request.body = JSON.dump({
+          "model" => MODELS[@config['model']],
+          "max_tokens" => @config['max_tokens'] || 1024, # Allow overriding max_tokens from config
+          "messages" => [
+            {
+              "role" => "user", # The entire prompt is passed as a single user message
+              "content" => prompt_content
+            }
+          ]
+        })
+
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
+          http.request(request)
+        end
+
+        if response.code != '200'
+          raise N2B::LlmApiError.new("LLM API Error: #{response.code} #{response.message} - #{response.body}")
+        end
+
+        # Return the raw JSON string. CLI's call_llm_for_diff_analysis will handle parsing.
+        # The Claude API for messages returns the analysis in response.body['content'].first['text']
+        # which should itself be a JSON string as per our prompt's instructions.
+        JSON.parse(response.body)['content'].first['text']
+      end
     end 
   end
 end

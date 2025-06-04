@@ -11,32 +11,52 @@ module N2B
 
     def execute
       config = get_config(reconfigure: @options[:config])
-      input_text = @args.join(' ')
-      if @args.first == 'div'
-        unless is_git_repository?
-          puts "Error: Not a git repository."
-          exit 1 # Consider how to test exit calls, or if it should raise an exception for easier testing.
+      command = @args.shift # Get the command, e.g., 'diff'
+      user_input = @args.join(' ') # Remaining args form user input/prompt addition
+
+      if command == 'diff'
+        vcs_type = get_vcs_type
+        if vcs_type == :none
+          puts "Error: Not a git or hg repository."
+          exit 1
         end
 
-        diff_output = execute_git_diff
-        analyze_diff(diff_output, config)
-      elsif input_text.empty?
+        diff_output = execute_vcs_diff(vcs_type)
+        user_prompt_addition = user_input # For diff, the rest of the input is the user's prompt focus
+        analyze_diff(diff_output, config, user_prompt_addition)
+      elsif command.nil? && user_input.empty? # No command and no input text after options
         puts "Enter your natural language command:"
         input_text = $stdin.gets.chomp
+        process_natural_language_command(input_text, config)
+      else # Natural language command (either `command` itself if not 'diff', or `user_input` if `command` was nil but there was text)
+        input_text = command ? "#{command} #{user_input}".strip : user_input
         process_natural_language_command(input_text, config)
       else
         process_natural_language_command(input_text, config)
       end
     end
 
-    protected # Changed to protected for easier testing/mocking if necessary, or keep private and test differently
+    protected
 
-    def is_git_repository?
-      system('git rev-parse --is-inside-work-tree', out: File::NULL, err: File::NULL)
+    def get_vcs_type
+      if Dir.exist?(File.join(Dir.pwd, '.git'))
+        :git
+      elsif Dir.exist?(File.join(Dir.pwd, '.hg'))
+        :hg
+      else
+        :none
+      end
     end
 
-    def execute_git_diff
-      `git diff HEAD`
+    def execute_vcs_diff(vcs_type)
+      case vcs_type
+      when :git
+        `git diff HEAD`
+      when :hg
+        `hg diff`
+      else
+        "" # Should not happen if get_vcs_type logic is correct and checked before calling
+      end
     end
 
     private
@@ -63,21 +83,28 @@ module N2B
       end
     end
 
-    def analyze_diff(diff_output, config)
-      prompt = <<-PROMPT
-Please analyze the following code diff. Provide:
-1. A concise summary of the changes.
-2. A list of potential errors or bugs.
-3. Suggestions for improvements or best practices.
+    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "")
+      default_system_prompt = <<-SYSTEM_PROMPT.strip
+You are a senior software developer reviewing a code diff.
+Your task is to provide a constructive and detailed analysis of the changes.
+Focus on identifying potential bugs, suggesting improvements in code quality, style, performance, and security.
+Also, provide a concise summary of the changes.
+The user may provide additional instructions below.
+Analyze the following diff:
+SYSTEM_PROMPT
 
-Return the analysis as a JSON object with the keys "summary", "errors", and "improvements".
+      json_instruction = <<-JSON_INSTRUCTION.strip
+Return your analysis as a JSON object with the keys "summary", "errors" (as a list of strings), and "improvements" (as a list of strings).
+JSON_INSTRUCTION
 
-Diff:
-```
-#{diff_output}
-```
-PROMPT
+      full_prompt = "#{default_system_prompt}\n\nDiff:\n```\n#{diff_output}\n```\n\n"
+      full_prompt += "User Instructions:\n#{user_prompt_addition}\n\n" unless user_prompt_addition.to_s.strip.empty?
+      full_prompt += json_instruction
+      full_prompt
+    end
 
+    def analyze_diff(diff_output, config, user_prompt_addition = "")
+      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition)
       analysis_json_str = call_llm_for_diff_analysis(prompt, config)
 
       begin
@@ -107,10 +134,22 @@ PROMPT
 
     def call_llm_for_diff_analysis(prompt, config)
       begin
-        llm = config['llm'] == 'openai' ? N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
-        response_json_str = llm.make_request(prompt)
+        llm_service_name = config['llm']
+        llm = case llm_service_name
+              when 'openai'
+                N2M::Llm::OpenAi.new(config)
+              when 'claude'
+                N2M::Llm::Claude.new(config)
+              when 'gemini'
+                N2M::Llm::Gemini.new(config)
+              else
+                # Should not happen if config is validated, but as a safeguard:
+                raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
+              end
+
+        response_json_str = llm.analyze_code_diff(prompt) # Call the new dedicated method
         response_json_str
-      rescue N2B::LlmApiError => e
+      rescue N2B::LlmApiError => e # This catches errors from analyze_code_diff
         puts "Error communicating with the LLM: #{e.message}"
         return '{"summary": "Error: Could not analyze diff due to LLM API error.", "errors": [], "improvements": []}'
       end
