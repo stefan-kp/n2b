@@ -21,9 +21,39 @@ module N2B
           exit 1
         end
 
+        # Parse --requirements option from @args (which are args after 'diff')
+        requirements_filepath = nil
+        remaining_args_for_prompt = []
+        i = 0
+        while i < @args.length
+          arg = @args[i]
+          if arg.start_with?('--requirements=')
+            requirements_filepath = arg.split('=', 2)[1]
+            i += 1
+          elsif arg == '--requirements' && @args[i+1]
+            requirements_filepath = @args[i+1]
+            i += 2 # Consumed both --requirements and its value
+          else
+            remaining_args_for_prompt << arg
+            i += 1
+          end
+        end
+
+        user_prompt_addition = remaining_args_for_prompt.join(' ')
+
+        requirements_content = nil
+        if requirements_filepath
+          unless File.exist?(requirements_filepath)
+            puts "Error: Requirements file not found: #{requirements_filepath}"
+            exit 1
+          end
+          requirements_content = File.read(requirements_filepath)
+          # For this subtask, requirements_content is read but not yet passed further.
+          # This will be done in a subsequent step.
+        end
+
         diff_output = execute_vcs_diff(vcs_type)
-        user_prompt_addition = user_input # For diff, the rest of the input is the user's prompt focus
-        analyze_diff(diff_output, config, user_prompt_addition)
+        analyze_diff(diff_output, config, user_prompt_addition, requirements_content)
       elsif command.nil? && user_input.empty? # No command and no input text after options
         puts "Enter your natural language command:"
         input_text = $stdin.gets.chomp
@@ -83,28 +113,51 @@ module N2B
       end
     end
 
-    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "")
+    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "", requirements_content = nil)
       default_system_prompt = <<-SYSTEM_PROMPT.strip
 You are a senior software developer reviewing a code diff.
 Your task is to provide a constructive and detailed analysis of the changes.
 Focus on identifying potential bugs, suggesting improvements in code quality, style, performance, and security.
 Also, provide a concise summary of the changes.
-The user may provide additional instructions below.
-Analyze the following diff:
+The user may provide additional instructions or specific requirements below.
 SYSTEM_PROMPT
+
+      user_instructions_section = ""
+      unless user_prompt_addition.to_s.strip.empty?
+        user_instructions_section = "User Instructions:\n#{user_prompt_addition.strip}\n\n"
+      end
+
+      requirements_section = ""
+      if requirements_content && !requirements_content.to_s.strip.empty?
+        requirements_section = <<-REQUIREMENTS_BLOCK
+Please pay close attention to the following requirements. You must verify if the code changes align with, implement, or contradict these requirements. Explicitly state how the diff addresses each requirement.
+--- BEGIN REQUIREMENTS ---
+#{requirements_content.strip}
+--- END REQUIREMENTS ---
+
+REQUIREMENTS_BLOCK
+      end
+
+      analysis_intro = "Analyze the following diff based on the general instructions above and these specific requirements (if any):"
 
       json_instruction = <<-JSON_INSTRUCTION.strip
 Return your analysis as a JSON object with the keys "summary", "errors" (as a list of strings), and "improvements" (as a list of strings).
 JSON_INSTRUCTION
 
-      full_prompt = "#{default_system_prompt}\n\nDiff:\n```\n#{diff_output}\n```\n\n"
-      full_prompt += "User Instructions:\n#{user_prompt_addition}\n\n" unless user_prompt_addition.to_s.strip.empty?
-      full_prompt += json_instruction
+      full_prompt = [
+        default_system_prompt,
+        user_instructions_section,
+        requirements_section,
+        analysis_intro,
+        "Diff:\n```\n#{diff_output}\n```",
+        json_instruction
+      ].select { |s| s && !s.empty? }.join("\n\n") # Join non-empty sections with double newlines
+
       full_prompt
     end
 
-    def analyze_diff(diff_output, config, user_prompt_addition = "")
-      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition)
+    def analyze_diff(diff_output, config, user_prompt_addition = "", requirements_content = nil)
+      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition, requirements_content)
       analysis_json_str = call_llm_for_diff_analysis(prompt, config)
 
       begin
