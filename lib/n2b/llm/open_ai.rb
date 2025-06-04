@@ -45,6 +45,38 @@ module N2M
         end
         answer
       end
+
+      def analyze_code_diff(prompt_content)
+        # This method assumes prompt_content is the full, ready-to-send prompt
+        # including all instructions for the LLM (system message, diff, user additions, JSON format).
+        request = Net::HTTP::Post.new(API_URI)
+        request.content_type = 'application/json'
+        request['Authorization'] = "Bearer #{@config['access_key']}"
+
+        request.body = JSON.dump({
+          "model" => MODELS[@config['model']],
+          "response_format" => { "type" => "json_object" }, # Crucial for OpenAI to return JSON
+          "messages" => [
+            {
+              "role" => "user", # The entire prompt is passed as a single user message
+              "content" => prompt_content
+            }
+          ],
+          "max_tokens" => @config['max_tokens'] || 1500 # Allow overriding, ensure it's enough for JSON
+        })
+
+        response = Net::HTTP.start(API_URI.hostname, API_URI.port, use_ssl: true) do |http|
+          http.request(request)
+        end
+
+        if response.code != '200'
+          raise N2B::LlmApiError.new("LLM API Error: #{response.code} #{response.message} - #{response.body}")
+        end
+
+        # Return the raw JSON string. CLI's call_llm_for_diff_analysis will handle parsing.
+        # OpenAI with json_object mode should return the JSON directly in 'choices'.first.message.content
+        JSON.parse(response.body)['choices'].first['message']['content']
+      end
     end
   end
 end
