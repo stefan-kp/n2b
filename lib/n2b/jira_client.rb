@@ -111,6 +111,75 @@ module N2B
       end
     end
 
+    def extract_requirements_from_description(description_string)
+      extracted_lines = []
+      in_requirements_section = false
+
+      # Headers that trigger requirement extraction. Case-insensitive.
+      # Jira often uses h1, h2, etc. for headers, or bold text.
+      # We'll look for lines that *start* with these, possibly after Jira's header markup like "hN. "
+      # Or common text like "Acceptance Criteria:", "Requirements:"
+      # Also include comment-specific implementation keywords
+      requirement_headers_regex = /^(h[1-6]\.\s*)?(Requirements|Acceptance Criteria|Tasks|Key Deliverables|Scope|User Stories|Implementation|Testing|Technical|Additional|Clarification|Comment \d+)/i
+
+      # Regex to identify common list item markers
+      _list_item_regex = /^\s*[\*\-\+]\s+/ # Unused but kept for potential future use
+      # Regex for lines that look like section headers (to stop capturing)
+      # This is a simple heuristic: a line with a few words, ending with a colon, or Jira hN. style
+      section_break_regex = /^(h[1-6]\.\s*)?\w+(\s+\w+){0,3}:?\s*$/i
+
+
+      description_string.to_s.each_line do |line| # Handle nil description_string
+        stripped_line = line.strip
+
+        if stripped_line.match?(requirement_headers_regex)
+          in_requirements_section = true
+          # Add the header itself to the extracted content if desired, or just use it as a trigger
+          # For now, let's add the line to give context.
+          extracted_lines << stripped_line
+          next # Move to the next line
+        end
+
+        if in_requirements_section
+          # If we encounter another significant header, stop capturing this section
+          # (unless it's another requirements header, which is fine)
+          if stripped_line.match?(section_break_regex) && !stripped_line.match?(requirement_headers_regex)
+            # Check if this new header is one of the requirement types. If so, continue.
+            # Otherwise, break. This logic is simplified: if it's any other header, stop.
+            is_another_req_header = false # Placeholder for more complex logic if needed
+            requirement_headers_regex.match(stripped_line) { is_another_req_header = true }
+
+            unless is_another_req_header
+              in_requirements_section = false # Stop capturing
+              # Potentially add a separator if concatenating multiple distinct sections later
+              # extracted_lines << "---"
+              next # Don't include this new non-req header in current section
+            else
+              # It's another requirement-related header, so add it and continue
+              extracted_lines << stripped_line
+              next
+            end
+          end
+
+          # Capture list items or general text within the section
+          # For now, we are quite inclusive of lines within a detected section.
+          # We could be more strict and only take list_item_regex lines,
+          # but often text paragraphs under a heading are relevant too.
+          extracted_lines << stripped_line unless stripped_line.empty?
+        end
+      end
+
+      if extracted_lines.empty?
+        # Fallback: return the entire description if no specific sections found
+        return description_string.to_s.strip # Handle nil and strip
+      else
+        # Join extracted lines and clean up excessive newlines
+        # Replace 3+ newlines with 2, and 2+ newlines with 2 (effectively max 2 newlines)
+        # Also, strip leading/trailing whitespace from the final result.
+        return extracted_lines.join("\n").gsub(/\n{3,}/, "\n\n").gsub(/\n{2,}/, "\n\n").strip
+      end
+    end
+
     private
 
     def process_ticket_data(ticket_data, comments_data)
@@ -324,75 +393,6 @@ module N2B
         end
       elsif node.is_a?(Array)
         node.each { |child| extract_text_recursive(child, text_parts) }
-      end
-    end
-
-    def extract_requirements_from_description(description_string)
-      extracted_lines = []
-      in_requirements_section = false
-
-      # Headers that trigger requirement extraction. Case-insensitive.
-      # Jira often uses h1, h2, etc. for headers, or bold text.
-      # We'll look for lines that *start* with these, possibly after Jira's header markup like "hN. "
-      # Or common text like "Acceptance Criteria:", "Requirements:"
-      # Also include comment-specific implementation keywords
-      requirement_headers_regex = /^(h[1-6]\.\s*)?(Requirements|Acceptance Criteria|Tasks|Key Deliverables|Scope|User Stories|Implementation|Testing|Technical|Additional|Clarification|Comment \d+)/i
-
-      # Regex to identify common list item markers
-      _list_item_regex = /^\s*[\*\-\+]\s+/ # Unused but kept for potential future use
-      # Regex for lines that look like section headers (to stop capturing)
-      # This is a simple heuristic: a line with a few words, ending with a colon, or Jira hN. style
-      section_break_regex = /^(h[1-6]\.\s*)?\w+(\s+\w+){0,3}:?\s*$/i
-
-
-      description_string.to_s.each_line do |line| # Handle nil description_string
-        stripped_line = line.strip
-
-        if stripped_line.match?(requirement_headers_regex)
-          in_requirements_section = true
-          # Add the header itself to the extracted content if desired, or just use it as a trigger
-          # For now, let's add the line to give context.
-          extracted_lines << stripped_line
-          next # Move to the next line
-        end
-
-        if in_requirements_section
-          # If we encounter another significant header, stop capturing this section
-          # (unless it's another requirements header, which is fine)
-          if stripped_line.match?(section_break_regex) && !stripped_line.match?(requirement_headers_regex)
-            # Check if this new header is one of the requirement types. If so, continue.
-            # Otherwise, break. This logic is simplified: if it's any other header, stop.
-            is_another_req_header = false # Placeholder for more complex logic if needed
-            requirement_headers_regex.match(stripped_line) { is_another_req_header = true }
-
-            unless is_another_req_header
-              in_requirements_section = false # Stop capturing
-              # Potentially add a separator if concatenating multiple distinct sections later
-              # extracted_lines << "---"
-              next # Don't include this new non-req header in current section
-            else
-              # It's another requirement-related header, so add it and continue
-              extracted_lines << stripped_line
-              next
-            end
-          end
-
-          # Capture list items or general text within the section
-          # For now, we are quite inclusive of lines within a detected section.
-          # We could be more strict and only take list_item_regex lines,
-          # but often text paragraphs under a heading are relevant too.
-          extracted_lines << stripped_line unless stripped_line.empty?
-        end
-      end
-
-      if extracted_lines.empty?
-        # Fallback: return the entire description if no specific sections found
-        return description_string.to_s.strip # Handle nil and strip
-      else
-        # Join extracted lines and clean up excessive newlines
-        # Replace 3+ newlines with 2, and 2+ newlines with 2 (effectively max 2 newlines)
-        # Also, strip leading/trailing whitespace from the final result.
-        return extracted_lines.join("\n").gsub(/\n{3,}/, "\n\n").gsub(/\n{2,}/, "\n\n").strip
       end
     end
 

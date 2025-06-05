@@ -88,7 +88,7 @@ module N2M
         # The prompt_content for diff analysis should instruct the LLM to return JSON.
         # For Ollama, you can also try adding "format": "json" to the request if the model supports it.
         request_body = {
-          "model" => @config['model'] || MODELS.keys.first,
+          "model" => get_model_name,
           "messages" => [
             {
               "role" => "user",

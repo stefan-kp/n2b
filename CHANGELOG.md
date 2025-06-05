@@ -24,6 +24,12 @@
   - Git branch comparison with auto-detection of main/master branches
   - Enhanced branch validation and error handling for both git and hg
   - Option validation to prevent invalid flag combinations
+0.5.1 Bug Fixes:
+  - Fixed typographical error in gemspec description ("q quick helper" → "a quick helper")
+  - Fixed undefined MODELS constant in Ollama LLM client causing runtime errors
+  - Removed duplicate extract_requirements_from_description method in test file
+  - Cleaned up outdated test code and comments
+
 0.5.0 Jira Integration & Enhanced Analysis:
   - Full Jira API integration with real ticket fetching and comment posting
   - Structured Jira comments using Atlassian Document Format (ADF) with proper formatting

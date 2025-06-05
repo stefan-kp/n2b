@@ -238,6 +238,11 @@ module N2B
       Comment 2 (Tech Lead, 2024-01-16T14:20:00.000Z):
       Implementation note: Use the new security library v2.1+ for the authentication module. The payment gateway integration should use the sandbox environment for testing. Database schema changes need migration scripts.
       Comment 3 (QA Engineer, 2024-01-17T09:15:00.000Z):
+      Testing requirements:
+      - Test with mobile devices (iOS/Android)
+      - Verify responsive design on tablets
+      - Load testing with 1000+ concurrent users
+      - Security penetration testing required
       EXPECTED
 
       expected_output = "Ticket Key: PROJ-123\nSummary: This is a dummy summary for PROJ-123\n\n--- Extracted Requirements ---\n#{expected_extracted_reqs}"
@@ -409,42 +414,4 @@ module N2B
   end
 end
 
-# A quick fix for extract_requirements_from_description to handle nil input
-module N2B
-  class JiraClient
-    def extract_requirements_from_description(description_string)
-      extracted_lines = []
-      in_requirements_section = false
-      requirement_headers_regex = /^(h[1-6]\.\s*)?(Requirements|Acceptance Criteria|Tasks|Key Deliverables|Scope|User Stories)/i
-      section_break_regex = /^(h[1-6]\.\s*)?\w+(\s+\w+){0,3}:?\s*$/i
 
-      description_string.to_s.each_line do |line| # Changed to description_string.to_s
-        stripped_line = line.strip
-        if stripped_line.match?(requirement_headers_regex)
-          in_requirements_section = true
-          extracted_lines << stripped_line
-          next
-        end
-        if in_requirements_section
-          if stripped_line.match?(section_break_regex) && !stripped_line.match?(requirement_headers_regex)
-            is_another_req_header = false
-            requirement_headers_regex.match(stripped_line) { is_another_req_header = true }
-            unless is_another_req_header
-              in_requirements_section = false
-              next
-            else
-              extracted_lines << stripped_line
-              next
-            end
-          end
-          extracted_lines << stripped_line unless stripped_line.empty?
-        end
-      end
-      if extracted_lines.empty?
-        return description_string.to_s.strip
-      else
-        return extracted_lines.join("\n").gsub(/\n{3,}/, "\n\n").gsub(/\n{2,}/, "\n\n").strip
-      end
-    end
-  end
-end
