@@ -1,4 +1,6 @@
-module N2B 
+require_relative 'jira_client' # For N2B::JiraClient
+
+module N2B
   class CLI < Base
     def self.run(args)
       new(args).execute
@@ -10,7 +12,8 @@ module N2B
     end
 
     def execute
-      config = get_config(reconfigure: @options[:config])
+      # Pass advanced_config flag to get_config
+      config = get_config(reconfigure: @options[:config], advanced_flow: @options[:advanced_config])
       user_input = @args.join(' ') # All remaining args form user input/prompt addition
 
       if @options[:diff]
@@ -37,17 +40,113 @@ module N2B
       requirements_filepath = @options[:requirements]
       user_prompt_addition = @args.join(' ') # All remaining args are user prompt addition
 
-      requirements_content = nil
-      if requirements_filepath
-        unless File.exist?(requirements_filepath)
-          puts "Error: Requirements file not found: #{requirements_filepath}"
-          exit 1
+      # Jira Ticket Information
+      jira_ticket = @options[:jira_ticket]
+      jira_update_flag = @options[:jira_update] # true, false, or nil
+
+      requirements_content = nil # Initialize requirements_content
+
+      if jira_ticket
+        puts "Jira ticket specified: #{jira_ticket_id_or_url}"
+        if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
+          begin
+            jira_client = N2B::JiraClient.new(config) # Pass the whole config
+            puts "Fetching Jira ticket details..."
+            # If a requirements file is also provided, the Jira ticket will take precedence.
+            # Or, we could append/prepend. For now, Jira overwrites.
+            requirements_content = jira_client.fetch_ticket(jira_ticket_id_or_url)
+            puts "Successfully fetched Jira ticket details."
+            # The fetched content is now in requirements_content and will be passed to analyze_diff
+          rescue N2B::JiraClient::JiraApiError => e
+            puts "Error fetching Jira ticket: #{e.message}"
+            puts "Proceeding with diff analysis without Jira ticket details."
+          rescue ArgumentError => e # Catches missing Jira config in JiraClient.new
+            puts "Jira configuration error: #{e.message}"
+            puts "Please ensure Jira is configured correctly using 'n2b -c'."
+            puts "Proceeding with diff analysis without Jira ticket details."
+          rescue StandardError => e
+            puts "An unexpected error occurred while fetching Jira ticket: #{e.message}"
+            puts "Proceeding with diff analysis without Jira ticket details."
+          end
+        else
+          puts "Jira configuration is missing or incomplete in N2B settings."
+          puts "Please configure Jira using 'n2b -c' to fetch ticket details."
+          puts "Proceeding with diff analysis without Jira ticket details."
         end
-        requirements_content = File.read(requirements_filepath)
+        # Handling of jira_update_flag can be done elsewhere, e.g., after analysis
+        if jira_update_flag == true
+          puts "Note: Jira ticket update (--jira-update) is flagged."
+          # Actual update logic will be separate
+        elsif jira_update_flag == false
+          puts "Note: Jira ticket will not be updated (--jira-no-update)."
+        end
+      end
+
+      # Load requirements from file if no Jira ticket was fetched or if specifically desired even with Jira.
+      # Current logic: Jira fetch, if successful, populates requirements_content.
+      # If Jira not specified, or fetch failed, try to load from file.
+      if requirements_content.nil? && requirements_filepath
+        if File.exist?(requirements_filepath)
+          puts "Loading requirements from file: #{requirements_filepath}"
+          requirements_content = File.read(requirements_filepath)
+        else
+          puts "Error: Requirements file not found: #{requirements_filepath}"
+          # Decide if to exit or proceed. For now, proceed.
+          puts "Proceeding with diff analysis without file-based requirements."
+        end
+      elsif requirements_content && requirements_filepath
+        puts "Note: Both Jira ticket and requirements file were provided. Using Jira ticket content for analysis."
       end
 
       diff_output = execute_vcs_diff(vcs_type, @options[:branch])
-      analyze_diff(diff_output, config, user_prompt_addition, requirements_content)
+      analysis_result = analyze_diff(diff_output, config, user_prompt_addition, requirements_content) # Store the result
+
+      # --- Jira Update Logic ---
+      if jira_ticket && analysis_result && !analysis_result.empty?
+        # Check if Jira config is valid for updating
+        if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
+          jira_comment = format_analysis_for_jira(analysis_result)
+          proceed_with_update = false
+
+          if jira_update_flag == true # --jira-update used
+            proceed_with_update = true
+          elsif jira_update_flag.nil? # Neither --jira-update nor --jira-no-update used
+            puts "\nWould you like to update Jira ticket #{jira_ticket} with this analysis? (y/n)"
+            user_choice = $stdin.gets.chomp.downcase
+            proceed_with_update = user_choice == 'y'
+          end # If jira_update_flag is false, proceed_with_update remains false
+
+          if proceed_with_update
+            begin
+              # Re-instantiate JiraClient or use an existing one if available and in scope
+              # For safety and simplicity here, re-instantiate with current config.
+              update_jira_client = N2B::JiraClient.new(config)
+              puts "Updating Jira ticket #{jira_ticket}..."
+              if update_jira_client.update_ticket(jira_ticket, jira_comment)
+                puts "Jira ticket #{jira_ticket} updated successfully."
+              else
+                # update_ticket currently returns true/false, but might raise error for http issues
+                puts "Failed to update Jira ticket #{jira_ticket}. The client did not report an error, but the update may not have completed."
+              end
+            rescue N2B::JiraClient::JiraApiError => e
+              puts "Error updating Jira ticket: #{e.message}"
+            rescue ArgumentError => e # From JiraClient.new if config is suddenly invalid
+              puts "Jira configuration error before update: #{e.message}"
+            rescue StandardError => e
+              puts "An unexpected error occurred while updating Jira ticket: #{e.message}"
+            end
+          else
+            puts "Jira ticket update skipped."
+          end
+        else
+          puts "Jira configuration is missing or incomplete. Cannot proceed with Jira update."
+        end
+      elsif jira_ticket && (analysis_result.nil? || analysis_result.empty?)
+        puts "Skipping Jira update as analysis result was empty or not generated."
+      end
+      # --- End of Jira Update Logic ---
+
+      analysis_result # Return analysis_result from handle_diff_analysis
     end
 
     def get_vcs_type
@@ -284,20 +383,29 @@ REQUIREMENTS_BLOCK
       end
 
       json_instruction = <<-JSON_INSTRUCTION.strip
-CRITICAL: Return ONLY a valid JSON object with the keys "summary", "errors" (as a list of strings), "improvements" (as a list of strings), "test_coverage" (as a string), and "requirements_evaluation" (as a string, only if requirements were provided).
+CRITICAL: Return ONLY a valid JSON object.
 Do not include any explanatory text before or after the JSON.
 Each error and improvement should include specific file paths and line numbers.
 
+The JSON object must contain the following keys:
+- "summary": (string) Brief overall description of the changes.
+- "ticket_implementation_summary": (string) A concise summary of what was implemented or achieved in relation to the ticket's goals, based *only* on the provided diff. This is for developer status updates and Jira comments.
+- "errors": (list of strings) Potential bugs or issues found.
+- "improvements": (list of strings) Suggestions for code quality, style, performance, or security.
+- "test_coverage": (string) Assessment of test coverage for the changes.
+- "requirements_evaluation": (string, include only if requirements were provided in the prompt) Evaluation of how the changes meet the provided requirements.
+
 Example format:
 {
-  "summary": "Brief description of the changes",
+  "summary": "Refactored the user authentication module and added password complexity checks.",
+  "ticket_implementation_summary": "Implemented the core logic for user password updates and strengthened security by adding complexity validation as per the ticket's primary goal. Some UI elements are pending.",
   "errors": [
-    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil",
-    "src/main.js lines 15-20: Missing error handling for async operation"
+    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil.",
+    "src/main.js lines 15-20: Missing error handling for async operation."
   ],
   "improvements": [
-    "lib/example.rb line 30: Consider using a constant for the magic number 42",
-    "src/utils.py lines 5-10: This method could be simplified using list comprehension"
+    "lib/example.rb line 30: Consider using a constant for the magic number 42.",
+    "src/utils.py lines 5-10: This method could be simplified using list comprehension."
   ],
   "test_coverage": "Good: New functionality in lib/example.rb has corresponding tests in test/example_test.rb. Missing: No tests for error handling edge cases in the new validation method.",
   "requirements_evaluation": "✅ IMPLEMENTED: User authentication feature is fully implemented in auth.rb. ⚠️ PARTIALLY IMPLEMENTED: Error handling is present but lacks specific error codes. ❌ NOT IMPLEMENTED: Email notifications are not addressed in this diff."
@@ -352,11 +460,72 @@ JSON_INSTRUCTION
           puts "\nRequirements Evaluation:"
           puts requirements_eval
         end
+
+        puts "\nTicket Implementation Summary:"
+        impl_summary = analysis_result['ticket_implementation_summary']
+        puts impl_summary && !impl_summary.to_s.strip.empty? ? impl_summary : "No implementation summary provided."
+
         puts "-------------------"
+        return analysis_result # Return the parsed hash
       rescue JSON::ParserError => e # Handles cases where the JSON string (even fallback) is malformed
         puts "Critical Error: Failed to parse JSON response for diff analysis: #{e.message}"
         puts "Raw response was: #{analysis_json_str}"
+        return {} # Return empty hash on parsing error
       end
+    end
+
+    private # Make sure new helper is private
+
+    def format_analysis_for_jira(analysis_result)
+      return "No analysis result available." if analysis_result.nil? || analysis_result.empty?
+
+      comment_parts = []
+
+      comment_parts << "*N2B Code Diff Analysis Report*"
+      comment_parts << "-------------------------------"
+
+      # Implementation Summary (New)
+      comment_parts << "*Implementation Highlights:*"
+      impl_summary = analysis_result['ticket_implementation_summary']&.strip
+      comment_parts << (impl_summary && !impl_summary.empty? ? impl_summary : "_Not provided._")
+      comment_parts << "\n"
+
+      # Overall Technical Summary
+      comment_parts << "*Technical Summary of Changes:*"
+      comment_parts << (analysis_result['summary']&.strip || "_Not provided._")
+      comment_parts << "\n"
+
+      comment_parts << "*Potential Issues/Risks:*"
+      errors = analysis_result['errors']
+      if errors.is_a?(Array) && errors.any?
+        errors.each { |err| comment_parts << "- #{err.strip}" }
+      else
+        comment_parts << "_No specific issues identified._"
+      end
+      comment_parts << "\n"
+
+      comment_parts << "*Suggested Code Improvements:*"
+      improvements = analysis_result['improvements']
+      if improvements.is_a?(Array) && improvements.any?
+        improvements.each { |imp| comment_parts << "- #{imp.strip}" }
+      else
+        comment_parts << "_No specific improvements suggested._"
+      end
+      comment_parts << "\n"
+
+      comment_parts << "*Test Coverage:*"
+      coverage = analysis_result['test_coverage']&.strip
+      comment_parts << (coverage && !coverage.empty? ? coverage : "_Not provided._")
+      comment_parts << "\n"
+
+      requirements_eval = analysis_result['requirements_evaluation']&.strip
+      if requirements_eval && !requirements_eval.empty?
+        comment_parts << "*Requirements Evaluation:*"
+        comment_parts << requirements_eval # Jira markdown handles newlines
+        comment_parts << "\n"
+      end
+
+      comment_parts.join("\n\n").strip # Join with double newlines for better paragraph separation in Jira
     end
 
     def extract_json_from_response(response)
@@ -646,7 +815,16 @@ JSON_INSTRUCTION
     
 
     def parse_options
-      options = { execute: false, config: nil, diff: false, requirements: nil, branch: nil }
+      options = {
+        execute: false,
+        config: nil,
+        diff: false,
+        requirements: nil,
+        branch: nil,
+        jira_ticket: nil,
+        jira_update: nil, # Using nil as default, true for --jira-update, false for --jira-no-update
+        advanced_config: false # New option for advanced configuration flow
+      }
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: n2b [options] [natural language command]"
@@ -667,6 +845,18 @@ JSON_INSTRUCTION
           options[:requirements] = file
         end
 
+        opts.on('-j', '--jira JIRA_ID_OR_URL', 'Jira ticket ID or URL for context or update') do |jira|
+          options[:jira_ticket] = jira
+        end
+
+        opts.on('--jira-update', 'Update the linked Jira ticket (requires -j)') do
+          options[:jira_update] = true
+        end
+
+        opts.on('--jira-no-update', 'Do not update the linked Jira ticket (requires -j)') do
+          options[:jira_update] = false
+        end
+
         opts.on('-h', '--help', 'Print this help') do
           puts opts
           exit
@@ -674,6 +864,11 @@ JSON_INSTRUCTION
 
         opts.on('-c', '--config', 'Configure the API key and model') do
           options[:config] = true
+        end
+
+        opts.on('--advanced-config', 'Access advanced configuration options including Jira and privacy settings') do
+          options[:advanced_config] = true
+          options[:config] = true # Forcing config mode if advanced is chosen
         end
       end
 
@@ -689,6 +884,27 @@ JSON_INSTRUCTION
       # Validate option combinations
       if options[:branch] && !options[:diff]
         puts "Error: --branch option can only be used with --diff"
+        puts ""
+        puts parser.help
+        exit 1
+      end
+
+      if options[:jira_update] == true && options[:jira_ticket].nil?
+        puts "Error: --jira-update option requires a Jira ticket to be specified with -j or --jira."
+        puts ""
+        puts parser.help
+        exit 1
+      end
+
+      if options[:jira_update] == false && options[:jira_ticket].nil?
+        puts "Error: --jira-no-update option requires a Jira ticket to be specified with -j or --jira."
+        puts ""
+        puts parser.help
+        exit 1
+      end
+
+      if options[:jira_update] == true && options[:jira_update] == false
+        puts "Error: --jira-update and --jira-no-update are mutually exclusive."
         puts ""
         puts parser.help
         exit 1

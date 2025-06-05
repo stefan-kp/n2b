@@ -1,5 +1,6 @@
 require_relative '../test_helper' # Assumes test_helper.rb exists and sets up load paths correctly
 require 'n2b/cli'
+require 'n2b/jira_client' # Added for JiraClient mocking
 require 'minitest/autorun'
 require 'mocha/minitest'
 require 'fileutils'
@@ -59,6 +60,7 @@ module N2B
       # Stub get_config for any instance of CLI that might be created.
       # This avoids issues if Base#get_config is more complex or if CLI overrides it.
       N2B::CLI.any_instance.stubs(:get_config).returns(@mock_config)
+      @mock_jira_client = mock('jira_client') # Common mock for JiraClient
     end
 
     # Helper methods to check if VCS tools are available
@@ -398,7 +400,219 @@ module N2B
       req_path
     end
 
+    # --- Tests for new CLI options ---
+    def test_cli_jira_options_parsing
+      # Test -j <ticket_id>
+      options = N2B::CLI.new(['-d', '-j', 'TEST-123']).instance_variable_get(:@options)
+      assert_equal 'TEST-123', options[:jira_ticket]
+      assert_nil options[:jira_update] # Default
 
+      # Test -j <url>
+      options = N2B::CLI.new(['-d', '-j', 'https://example.com/browse/TEST-456']).instance_variable_get(:@options)
+      assert_equal 'https://example.com/browse/TEST-456', options[:jira_ticket]
+      assert_nil options[:jira_update]
+
+      # Test --jira-update
+      options = N2B::CLI.new(['-d', '-j', 'TEST-123', '--jira-update']).instance_variable_get(:@options)
+      assert_equal 'TEST-123', options[:jira_ticket]
+      assert_equal true, options[:jira_update]
+
+      # Test --jira-no-update
+      options = N2B::CLI.new(['-d', '-j', 'TEST-123', '--jira-no-update']).instance_variable_get(:@options)
+      assert_equal 'TEST-123', options[:jira_ticket]
+      assert_equal false, options[:jira_update]
+
+      # Test --advanced-config
+      options = N2B::CLI.new(['--advanced-config']).instance_variable_get(:@options)
+      assert_equal true, options[:advanced_config]
+      assert_equal true, options[:config] # Should also trigger normal config mode
+
+      # Test invalid: --jira-update without -j
+      assert_raises(OptionParser::InvalidOption) do # Or check for exit and error message if that's the behavior
+         N2B::CLI.new(['-d', '--jira-update']) # This should be caught by OptionParser logic in CLI
+      end
+    end
+
+    # --- Tests for diff analysis with Jira integration ---
+    def test_handle_diff_analysis_with_jira_ticket_fetch_success
+      skip "Git not available" unless git_available?
+      Dir.chdir(@tmp_dir) do
+        system("git init -q .", chdir: @tmp_dir) # Basic git setup
+
+        cli_instance = N2B::CLI.new(['--diff', '-j', 'PROJ-1'])
+        # Stub VCS methods
+        cli_instance.stubs(:get_vcs_type).returns(:git)
+        cli_instance.stubs(:execute_vcs_diff).returns("sample diff")
+
+        # Mock JiraClient
+        N2B::JiraClient.expects(:new).with(@mock_config).returns(@mock_jira_client)
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-1').returns("Jira ticket PROJ-1 description content.")
+
+        # Mock LLM call for diff analysis
+        mock_llm_instance = mock('llm_instance')
+        mock_llm_instance.expects(:analyze_code_diff)
+          .with(includes("Jira ticket PROJ-1 description content.")) # Ensure Jira content is in prompt
+          .returns({ 'summary' => 'Analysis with Jira content', 'errors' => [], 'improvements' => [], 'ticket_implementation_summary' => 'Implemented based on Jira.' }.to_json)
+        N2M::Llm::OpenAi.expects(:new).with(@mock_config).returns(mock_llm_instance) # Assuming OpenAi is default or configured
+
+        cli_instance.execute
+
+        $stdout.rewind
+        output = $stdout.string
+        assert_match "Fetching Jira ticket details...", output
+        assert_match "Successfully fetched Jira ticket details.", output
+        assert_match "Analysis with Jira content", output # Check LLM summary in output
+        assert_match "Implemented based on Jira.", output # Check ticket_implementation_summary
+      end
+    end
+
+    def test_handle_diff_analysis_with_jira_ticket_fetch_failure
+      skip "Git not available" unless git_available?
+      Dir.chdir(@tmp_dir) do
+        system("git init -q .", chdir: @tmp_dir)
+
+        cli_instance = N2B::CLI.new(['--diff', '-j', 'PROJ-2'])
+        cli_instance.stubs(:get_vcs_type).returns(:git)
+        cli_instance.stubs(:execute_vcs_diff).returns("sample diff")
+
+        N2B::JiraClient.expects(:new).with(@mock_config).returns(@mock_jira_client)
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-2').raises(N2B::JiraClient::JiraApiError.new("Failed to connect"))
+
+        mock_llm_instance = mock('llm_instance')
+        # Prompt should NOT contain Jira content
+        mock_llm_instance.expects(:analyze_code_diff)
+          .with(Not(includes("Jira ticket PROJ-2 description content.")))
+          .returns({ 'summary' => 'Analysis without Jira content', 'errors' => [], 'improvements' => [], 'ticket_implementation_summary' => 'Standard implementation.' }.to_json)
+        N2M::Llm::OpenAi.expects(:new).with(@mock_config).returns(mock_llm_instance)
+
+        cli_instance.execute
+        $stdout.rewind
+        output = $stdout.string
+        assert_match "Error fetching Jira ticket: Failed to connect", output
+        assert_match "Proceeding with diff analysis without Jira ticket details.", output
+        assert_match "Analysis without Jira content", output
+      end
+    end
+
+    # --- Tests for Jira Update Flow ---
+    def test_handle_diff_analysis_jira_update_flow
+      skip "Git not available" unless git_available?
+      Dir.chdir(@tmp_dir) do
+        system("git init -q .", chdir: @tmp_dir)
+
+        # Common setup for update flow tests
+        analysis_result_hash = {
+          'summary' => 'Test summary', 'errors' => [], 'improvements' => [],
+          'test_coverage' => 'Good', 'ticket_implementation_summary' => 'Implemented feature X.'
+        }
+        formatted_jira_comment = N2B::CLI.new([]).send(:format_analysis_for_jira, analysis_result_hash) # Get an instance for formatting
+
+        # Mock LLM part of analyze_diff to return our hash
+        # We need to allow analyze_diff to be called, but control its output
+        N2B::CLI.any_instance.stubs(:call_llm_for_diff_analysis).returns(analysis_result_hash.to_json)
+
+
+        # Scenario 1: --jira-update flag
+        cli_update = N2B::CLI.new(['--diff', '-j', 'PROJ-UP1', '--jira-update'])
+        cli_update.stubs(:get_vcs_type).returns(:git)
+        cli_update.stubs(:execute_vcs_diff).returns("diff for update")
+        N2B::JiraClient.expects(:new).twice.with(@mock_config).returns(@mock_jira_client) # Once for fetch, once for update
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-UP1').returns("Jira content for PROJ-UP1")
+        @mock_jira_client.expects(:update_ticket).with('PROJ-UP1', formatted_jira_comment).returns(true)
+
+        cli_update.execute
+        $stdout.rewind
+        assert_match "Jira ticket PROJ-UP1 updated successfully.", $stdout.string
+
+        # Scenario 2: --jira-no-update flag
+        @mock_jira_client.unstub(:update_ticket) # Clear previous expectation
+        @mock_jira_client.expects(:update_ticket).never # Should not be called
+
+        cli_no_update = N2B::CLI.new(['--diff', '-j', 'PROJ-NOUP', '--jira-no-update'])
+        cli_no_update.stubs(:get_vcs_type).returns(:git)
+        cli_no_update.stubs(:execute_vcs_diff).returns("diff for no update")
+        # N2B::JiraClient.expects(:new).with(@mock_config).returns(@mock_jira_client) # Already expected for fetch
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-NOUP').returns("Jira content for PROJ-NOUP")
+
+        cli_no_update.execute
+        $stdout.rewind
+        assert_match "Jira ticket update skipped.", $stdout.string
+
+        # Scenario 3: No update flag, user prompts 'y'
+        @mock_jira_client.unstub(:update_ticket)
+        @mock_jira_client.expects(:update_ticket).with('PROJ-PROMPT-Y', formatted_jira_comment).returns(true)
+
+        cli_prompt_y = N2B::CLI.new(['--diff', '-j', 'PROJ-PROMPT-Y'])
+        cli_prompt_y.stubs(:get_vcs_type).returns(:git)
+        cli_prompt_y.stubs(:execute_vcs_diff).returns("diff for prompt y")
+        # N2B::JiraClient.expects(:new).twice.with(@mock_config).returns(@mock_jira_client) # Fetch and update
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-PROMPT-Y').returns("Jira content for PROJ-PROMPT-Y")
+
+        mock_stdin_y = StringIO.new("y\n")
+        original_stdin = $stdin
+        $stdin = mock_stdin_y
+        begin
+          cli_prompt_y.execute
+        ensure
+          $stdin = original_stdin
+        end
+        $stdout.rewind
+        assert_match "Would you like to update Jira ticket PROJ-PROMPT-Y", $stdout.string
+        assert_match "Jira ticket PROJ-PROMPT-Y updated successfully.", $stdout.string
+
+        # Scenario 4: No update flag, user prompts 'n'
+        @mock_jira_client.unstub(:update_ticket)
+        @mock_jira_client.expects(:update_ticket).never
+
+        cli_prompt_n = N2B::CLI.new(['--diff', '-j', 'PROJ-PROMPT-N'])
+        cli_prompt_n.stubs(:get_vcs_type).returns(:git)
+        cli_prompt_n.stubs(:execute_vcs_diff).returns("diff for prompt n")
+        # N2B::JiraClient.expects(:new).with(@mock_config).returns(@mock_jira_client) # Fetch only
+        @mock_jira_client.expects(:fetch_ticket).with('PROJ-PROMPT-N').returns("Jira content for PROJ-PROMPT-N")
+
+        mock_stdin_n = StringIO.new("n\n")
+        $stdin = mock_stdin_n
+        begin
+          cli_prompt_n.execute
+        ensure
+          $stdin = original_stdin
+        end
+        $stdout.rewind
+        assert_match "Jira ticket update skipped.", $stdout.string
+      end
+    end
+
+    # --- Test for advanced_config flag being passed to get_config ---
+    def test_advanced_config_flag_passed_to_get_config
+      # Unstub get_config for this specific test to verify its arguments
+      N2B::CLI.any_instance.unstub(:get_config)
+
+      # Expect get_config to be called with advanced_flow: true
+      # The actual config process will be complex to mock here, so focus on param passing.
+      N2B::CLI.any_instance.expects(:get_config)
+        .with(reconfigure: true, advanced_flow: true) # --advanced-config implies reconfigure: true
+        .returns(@mock_config) # Return the standard mock_config to allow execution to continue
+        .once
+
+      cli_instance = N2B::CLI.new(['--advanced-config'])
+      # We need to prevent execute from trying to run a command or diff analysis.
+      # Since --advanced-config implies -c, ARGS will be empty, leading to interactive prompt.
+      cli_instance.stubs(:process_natural_language_command) # Stub to prevent interactive input
+
+      # Mock $stdin for the "Enter your natural language command:" prompt
+      mock_stdin_empty_command = StringIO.new("do nothing\n")
+      original_stdin_empty = $stdin
+      $stdin = mock_stdin_empty_command
+
+      begin
+        cli_instance.execute
+      ensure
+        $stdin = original_stdin_empty
+      end
+
+      # Restore the general stub for other tests
+      N2B::CLI.any_instance.stubs(:get_config).returns(@mock_config)
+    end
 
   end
 end
