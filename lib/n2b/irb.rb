@@ -991,7 +991,7 @@ module N2B
         
         # If we still can't fix it, return a formatted version of the original
         "# Auto-formatted Ticket\n\n```\n#{original_response.inspect}\n```"
-      rescue => e
+      rescue => _e
         # If anything goes wrong in the fixing process, return a readable version of the original
         if original_response.is_a?(Hash)
           # Try to create a readable markdown from the hash

@@ -12,9 +12,9 @@ Gem::Specification.new do |spec|
   spec.description   = %q{A tool to convert natural language instructions to bash commands using Claude API or OpenAI's GPT. also is q quick helper in the console to provide ruby code snippets and explanations or debug exceptions.}
   spec.homepage      = "https://github.com/stefan-kp/n2b"
   spec.metadata      = {
-    "homepage_uri" => "https://github.com/stefan-kp/n2b",
     "source_code_uri" => "https://github.com/stefan-kp/n2b",
-    "changelog_uri" => "https://github.com/stefan-kp/n2b/blob/main/CHANGELOG.md"
+    "changelog_uri" => "https://github.com/stefan-kp/n2b/blob/main/CHANGELOG.md",
+    "documentation_uri" => "https://github.com/stefan-kp/n2b/blob/main/README.md"
   }
   spec.license       = "MIT"
 

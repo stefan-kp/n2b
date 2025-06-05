@@ -47,14 +47,14 @@ module N2B
       requirements_content = nil # Initialize requirements_content
 
       if jira_ticket
-        puts "Jira ticket specified: #{jira_ticket_id_or_url}"
+        puts "Jira ticket specified: #{jira_ticket}"
         if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
           begin
             jira_client = N2B::JiraClient.new(config) # Pass the whole config
             puts "Fetching Jira ticket details..."
             # If a requirements file is also provided, the Jira ticket will take precedence.
             # Or, we could append/prepend. For now, Jira overwrites.
-            requirements_content = jira_client.fetch_ticket(jira_ticket_id_or_url)
+            requirements_content = jira_client.fetch_ticket(jira_ticket)
             puts "Successfully fetched Jira ticket details."
             # The fetched content is now in requirements_content and will be passed to analyze_diff
           rescue N2B::JiraClient::JiraApiError => e
@@ -105,7 +105,7 @@ module N2B
       if jira_ticket && analysis_result && !analysis_result.empty?
         # Check if Jira config is valid for updating
         if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
-          jira_comment = format_analysis_for_jira(analysis_result)
+          jira_comment_data = format_analysis_for_jira(analysis_result)
           proceed_with_update = false
 
           if jira_update_flag == true # --jira-update used
@@ -122,7 +122,7 @@ module N2B
               # For safety and simplicity here, re-instantiate with current config.
               update_jira_client = N2B::JiraClient.new(config)
               puts "Updating Jira ticket #{jira_ticket}..."
-              if update_jira_client.update_ticket(jira_ticket, jira_comment)
+              if update_jira_client.update_ticket(jira_ticket, jira_comment_data)
                 puts "Jira ticket #{jira_ticket} updated successfully."
               else
                 # update_ticket currently returns true/false, but might raise error for http issues
@@ -271,11 +271,11 @@ module N2B
 
     def validate_git_branch_exists(branch)
       # Check if branch exists locally
-      result = `git rev-parse --verify #{branch} 2>/dev/null`
+      _result = `git rev-parse --verify #{branch} 2>/dev/null`
       return true if $?.success?
 
       # Check if branch exists on remote
-      result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
+      _result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
       return true if $?.success?
 
       false
@@ -479,53 +479,25 @@ JSON_INSTRUCTION
     def format_analysis_for_jira(analysis_result)
       return "No analysis result available." if analysis_result.nil? || analysis_result.empty?
 
-      comment_parts = []
+      # Return structured data for ADF formatting
+      {
+        implementation_summary: analysis_result['ticket_implementation_summary']&.strip,
+        technical_summary: analysis_result['summary']&.strip,
+        issues: format_issues_for_adf(analysis_result['errors']),
+        improvements: format_improvements_for_adf(analysis_result['improvements']),
+        test_coverage: analysis_result['test_coverage']&.strip,
+        requirements_evaluation: analysis_result['requirements_evaluation']&.strip
+      }
+    end
 
-      comment_parts << "*N2B Code Diff Analysis Report*"
-      comment_parts << "-------------------------------"
+    def format_issues_for_adf(errors)
+      return [] unless errors.is_a?(Array) && errors.any?
+      errors.map(&:strip).reject(&:empty?)
+    end
 
-      # Implementation Summary (New)
-      comment_parts << "*Implementation Highlights:*"
-      impl_summary = analysis_result['ticket_implementation_summary']&.strip
-      comment_parts << (impl_summary && !impl_summary.empty? ? impl_summary : "_Not provided._")
-      comment_parts << "\n"
-
-      # Overall Technical Summary
-      comment_parts << "*Technical Summary of Changes:*"
-      comment_parts << (analysis_result['summary']&.strip || "_Not provided._")
-      comment_parts << "\n"
-
-      comment_parts << "*Potential Issues/Risks:*"
-      errors = analysis_result['errors']
-      if errors.is_a?(Array) && errors.any?
-        errors.each { |err| comment_parts << "- #{err.strip}" }
-      else
-        comment_parts << "_No specific issues identified._"
-      end
-      comment_parts << "\n"
-
-      comment_parts << "*Suggested Code Improvements:*"
-      improvements = analysis_result['improvements']
-      if improvements.is_a?(Array) && improvements.any?
-        improvements.each { |imp| comment_parts << "- #{imp.strip}" }
-      else
-        comment_parts << "_No specific improvements suggested._"
-      end
-      comment_parts << "\n"
-
-      comment_parts << "*Test Coverage:*"
-      coverage = analysis_result['test_coverage']&.strip
-      comment_parts << (coverage && !coverage.empty? ? coverage : "_Not provided._")
-      comment_parts << "\n"
-
-      requirements_eval = analysis_result['requirements_evaluation']&.strip
-      if requirements_eval && !requirements_eval.empty?
-        comment_parts << "*Requirements Evaluation:*"
-        comment_parts << requirements_eval # Jira markdown handles newlines
-        comment_parts << "\n"
-      end
-
-      comment_parts.join("\n\n").strip # Join with double newlines for better paragraph separation in Jira
+    def format_improvements_for_adf(improvements)
+      return [] unless improvements.is_a?(Array) && improvements.any?
+      improvements.map(&:strip).reject(&:empty?)
     end
 
     def extract_json_from_response(response)
@@ -582,7 +554,7 @@ JSON_INSTRUCTION
           # Parse hunk header (e.g., "@@ -10,7 +10,8 @@")
           match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/)
           if match
-            old_start = match[1].to_i
+            _old_start = match[1].to_i
             new_start = match[2].to_i
 
             # Use the new file line numbers for context

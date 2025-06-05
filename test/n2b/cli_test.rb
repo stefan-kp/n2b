@@ -46,6 +46,13 @@ module N2B
       @original_stderr = $stderr
       $stderr = StringIO.new
 
+      # CRITICAL: Protect user's config file by using a test-specific config file
+      @test_config_file = File.join(@tmp_dir, 'test_config.yml')
+      @original_config_file = N2B::Base::CONFIG_FILE
+      # Override the CONFIG_FILE constant for tests
+      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
+      N2B::Base.const_set(:CONFIG_FILE, @test_config_file)
+
       # Centralized config stubbing for all tests
       @mock_config = {
         'llm' => 'openai',
@@ -73,6 +80,10 @@ module N2B
     end
 
     def teardown
+      # Restore the original CONFIG_FILE constant to protect user's config
+      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
+      N2B::Base.const_set(:CONFIG_FILE, @original_config_file)
+
       FileUtils.rm_rf(@tmp_dir)
       $stdout = @original_stdout
       $stderr = @original_stderr
@@ -365,8 +376,8 @@ module N2B
       N2B::CLI.any_instance.unstub(:get_config)
 
       mock_config_for_reconfigure_test = @mock_config.dup
-      # Expect get_config to be called with reconfigure: true on the instance
-      N2B::CLI.any_instance.expects(:get_config).with(reconfigure: true).returns(mock_config_for_reconfigure_test).once
+      # Expect get_config to be called with reconfigure: true and advanced_flow: false on the instance
+      N2B::CLI.any_instance.expects(:get_config).with(reconfigure: true, advanced_flow: false).returns(mock_config_for_reconfigure_test).once
 
       cli_instance = N2B::CLI.new(['-c'])
 

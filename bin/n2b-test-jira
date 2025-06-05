@@ -1,0 +1,273 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'uri'
+require 'json'
+require 'base64'
+require 'yaml'
+
+# Jira API connection tester for N2B
+# Tests authentication, permissions, and specific ticket access
+class JiraConnectionTester
+  def initialize
+    @config_file = File.expand_path('~/.n2b/config.yml')
+    load_config
+  end
+
+  def load_config
+    unless File.exist?(@config_file)
+      puts "❌ Config file not found: #{@config_file}"
+      puts "Please run 'n2b --advanced-config' to set up Jira integration first."
+      exit 1
+    end
+
+    @config = YAML.load_file(@config_file)
+    @jira_config = @config['jira']
+
+    unless @jira_config && @jira_config['domain'] && @jira_config['email'] && @jira_config['api_key']
+      puts "❌ Jira configuration incomplete in #{@config_file}"
+      puts "Missing: domain, email, or api_key"
+      puts "Please run 'n2b --advanced-config' to configure Jira."
+      exit 1
+    end
+
+    # Handle domain that may or may not include protocol
+    domain = @jira_config['domain'].to_s.strip
+    if domain.start_with?('http://') || domain.start_with?('https://')
+      @base_url = "#{domain.chomp('/')}/rest/api/3"
+    else
+      @base_url = "https://#{domain.chomp('/')}/rest/api/3"
+    end
+
+    puts "✅ Config loaded successfully"
+    puts "   Domain: #{@jira_config['domain']}"
+    puts "   Email: #{@jira_config['email']}"
+    puts "   API Key: #{@jira_config['api_key'][0..10]}..." # Show only first part for security
+    puts "   Base URL: #{@base_url}"
+    puts
+  end
+
+  def test_connection
+    puts "🔍 Testing Jira API connection..."
+    puts "=" * 50
+
+    # Test 1: Basic API connectivity
+    test_basic_connectivity
+
+    # Test 2: Authentication
+    test_authentication
+
+    # Test 3: Permissions
+    test_permissions
+
+    # Test 4: Specific ticket access (if provided)
+    if ARGV[0]
+      test_ticket_access(ARGV[0])
+    else
+      puts "💡 To test specific ticket access, run: ruby test_jira_connection.rb TICKET-123"
+    end
+  end
+
+  private
+
+  def test_basic_connectivity
+    puts "1️⃣ Testing basic connectivity to Jira..."
+    
+    begin
+      uri = URI.parse(@base_url)
+      puts "   Connecting to: #{uri.host}:#{uri.port}"
+      
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = (uri.scheme == 'https')
+      http.open_timeout = 10
+      http.read_timeout = 10
+      
+      # Simple GET to the API root
+      request = Net::HTTP::Get.new('/rest/api/3/')
+      response = http.request(request)
+      
+      puts "   ✅ Connection successful (HTTP #{response.code})"
+      puts
+    rescue => e
+      puts "   ❌ Connection failed: #{e.message}"
+      puts "   Check your network connection and domain configuration."
+      exit 1
+    end
+  end
+
+  def test_authentication
+    puts "2️⃣ Testing authentication..."
+    
+    begin
+      response = make_api_request('GET', '/myself')
+      
+      if response['accountId']
+        puts "   ✅ Authentication successful"
+        puts "   Account ID: #{response['accountId']}"
+        puts "   Display Name: #{response['displayName']}"
+        puts "   Email: #{response['emailAddress']}"
+        puts
+      else
+        puts "   ⚠️  Authentication response unexpected:"
+        puts "   #{response}"
+        puts
+      end
+    rescue => e
+      puts "   ❌ Authentication failed: #{e.message}"
+      puts "   Check your email and API token."
+      puts "   API token should be generated from: https://id.atlassian.com/manage-profile/security/api-tokens"
+      exit 1
+    end
+  end
+
+  def test_permissions
+    puts "3️⃣ Testing required permissions..."
+
+    begin
+      # Test 1: Project access (Browse Projects permission)
+      response = make_api_request('GET', '/project')
+
+      if response.is_a?(Array) && response.length > 0
+        puts "   ✅ Browse Projects: Can access #{response.length} projects"
+        response.first(3).each do |project|
+          puts "     - #{project['key']}: #{project['name']}"
+        end
+        puts "     ... (showing first 3)" if response.length > 3
+
+        # Test 2: Issue access (Browse Issues permission)
+        test_project = response.first
+        puts "   🔍 Testing issue access in project: #{test_project['key']}"
+
+        begin
+          issues_response = make_api_request('GET', "/search?jql=project=#{test_project['key']}&maxResults=1")
+          if issues_response['issues'] && issues_response['issues'].length > 0
+            puts "   ✅ Browse Issues: Can access issues in #{test_project['key']}"
+
+            # Test 3: Comment access (if we found an issue)
+            test_issue = issues_response['issues'].first
+            begin
+              comments_response = make_api_request('GET', "/issue/#{test_issue['key']}/comment")
+              puts "   ✅ View Comments: Can access comments on #{test_issue['key']}"
+            rescue => e
+              puts "   ❌ View Comments: Cannot access comments (#{e.message})"
+            end
+
+            # Test 4: Add comment permission (we won't actually add, just check the endpoint)
+            puts "   ℹ️  Add Comments: Will be tested when actually posting comments"
+          else
+            puts "   ⚠️  No issues found in #{test_project['key']} to test comment permissions"
+          end
+        rescue => e
+          puts "   ❌ Browse Issues: Cannot search issues (#{e.message})"
+        end
+
+        puts
+      else
+        puts "   ❌ Browse Projects: No projects accessible"
+        puts "   Your API token needs 'Browse Projects' permission"
+        puts
+      end
+    rescue => e
+      puts "   ❌ Permission test failed: #{e.message}"
+      puts "   Your API token might not have sufficient permissions."
+      puts
+    end
+
+    puts "   📋 Required Jira Permissions for N2B:"
+    puts "   • Browse Projects - to access project list"
+    puts "   • Browse Issues - to read ticket details"
+    puts "   • View Comments - to read ticket comments"
+    puts "   • Add Comments - to post analysis results"
+    puts
+  end
+
+  def test_ticket_access(ticket_key)
+    puts "4️⃣ Testing access to specific ticket: #{ticket_key}..."
+    
+    begin
+      # Test ticket access
+      response = make_api_request('GET', "/issue/#{ticket_key}")
+      
+      puts "   ✅ Ticket access successful"
+      puts "   Key: #{response['key']}"
+      puts "   Summary: #{response.dig('fields', 'summary')}"
+      puts "   Status: #{response.dig('fields', 'status', 'name')}"
+      puts "   Assignee: #{response.dig('fields', 'assignee', 'displayName') || 'Unassigned'}"
+      puts
+      
+      # Test comments access
+      comments_response = make_api_request('GET', "/issue/#{ticket_key}/comment")
+      comment_count = comments_response.dig('comments')&.length || 0
+      puts "   ✅ Comments access successful (#{comment_count} comments)"
+      puts
+      
+    rescue => e
+      puts "   ❌ Ticket access failed: #{e.message}"
+      
+      if e.message.include?('404')
+        puts "   Possible causes:"
+        puts "   - Ticket doesn't exist"
+        puts "   - You don't have permission to view this ticket"
+        puts "   - Ticket is in a project you can't access"
+      elsif e.message.include?('401')
+        puts "   Authentication issue - check your API token"
+      elsif e.message.include?('403')
+        puts "   Permission denied - your account can't access this ticket"
+      end
+      puts
+    end
+  end
+
+  def make_api_request(method, path, body = nil)
+    full_url = "#{@base_url}#{path}"
+    uri = URI.parse(full_url)
+    
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = (uri.scheme == 'https')
+    http.read_timeout = 30
+    http.open_timeout = 10
+
+    request = case method.upcase
+              when 'GET'
+                Net::HTTP::Get.new(uri.request_uri)
+              when 'POST'
+                req = Net::HTTP::Post.new(uri.request_uri)
+                req.body = body.to_json if body
+                req
+              else
+                raise "Unsupported HTTP method: #{method}"
+              end
+
+    request['Authorization'] = "Basic #{Base64.strict_encode64("#{@jira_config['email']}:#{@jira_config['api_key']}")}"
+    request['Content-Type'] = 'application/json'
+    request['Accept'] = 'application/json'
+
+    response = http.request(request)
+
+    unless response.is_a?(Net::HTTPSuccess)
+      error_message = "Jira API Error: #{response.code} #{response.message}"
+      error_message += " - #{response.body}" if response.body && !response.body.empty?
+      raise error_message
+    end
+
+    response.body.empty? ? {} : JSON.parse(response.body)
+  rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
+         Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, Errno::ECONNREFUSED => e
+    raise "Jira API request failed: #{e.class} - #{e.message}"
+  end
+end
+
+# Run the test
+if __FILE__ == $0
+  puts "🧪 Jira API Connection Tester"
+  puts "=" * 50
+  puts
+
+  tester = JiraConnectionTester.new
+  tester.test_connection
+
+  puts "🎉 Test completed!"
+  puts
+  puts "If all tests passed, your Jira integration should work correctly."
+  puts "If any tests failed, check the error messages above for guidance."
+end

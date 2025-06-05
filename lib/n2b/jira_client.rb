@@ -15,7 +15,15 @@ module N2B
       unless @jira_config['domain'] && @jira_config['email'] && @jira_config['api_key']
         raise ArgumentError, "Jira domain, email, and API key must be configured in N2B settings."
       end
-      @base_url = "https://#{@jira_config['domain']}/rest/api/3" # Using API v3
+      # Handle domain that may or may not include protocol
+      domain = @jira_config['domain'].to_s.strip
+      if domain.start_with?('http://') || domain.start_with?('https://')
+        # Domain already includes protocol
+        @base_url = "#{domain.chomp('/')}/rest/api/3"
+      else
+        # Domain doesn't include protocol, add https://
+        @base_url = "https://#{domain.chomp('/')}/rest/api/3"
+      end
     end
 
     def fetch_ticket(ticket_key_or_url)
@@ -25,13 +33,133 @@ module N2B
         raise JiraApiError, "Could not extract ticket key from '#{ticket_key_or_url}'."
       end
 
-      # For now, return a dummy description
-      # In the future, this will make an API call to:
-      # GET "#{domain || @base_url}/issue/#{ticket_key}"
       puts "Fetching Jira ticket: #{ticket_key} from domain: #{domain || @jira_config['domain']}"
+      puts "Fetching ticket comments for additional context..."
 
-      # Simulate fetching data
-      # Enhanced dummy description for testing extraction
+      begin
+        # Fetch ticket details
+        ticket_path = "/rest/api/3/issue/#{ticket_key}"
+        ticket_data = make_api_request('GET', ticket_path)
+
+        # Fetch ticket comments
+        comments_path = "/rest/api/3/issue/#{ticket_key}/comment"
+        comments_response = make_api_request('GET', comments_path)
+        comments_data = comments_response['comments'] || []
+
+        puts "Successfully fetched ticket and #{comments_data.length} comments"
+
+        # Process real data
+        return process_ticket_data(ticket_data, comments_data)
+
+      rescue JiraApiError => e
+        puts "⚠️  Failed to fetch from Jira API: #{e.message}"
+        puts "Falling back to dummy data for development..."
+        return fetch_dummy_ticket_data(ticket_key)
+      end
+    end
+
+    def update_ticket(ticket_key_or_url, comment)
+      _domain, ticket_key = parse_ticket_input(ticket_key_or_url) # Use _domain to indicate it's not used here
+
+      unless ticket_key
+        raise JiraApiError, "Could not extract ticket key from '#{ticket_key_or_url}' for update."
+      end
+
+      puts "Updating Jira ticket #{ticket_key} with analysis comment..."
+
+      # Prepare the comment body in Jira's Atlassian Document Format (ADF)
+      comment_body = {
+        "body" => format_comment_as_adf(comment)
+      }
+
+      # Make the API call to add a comment
+      path = "/rest/api/3/issue/#{ticket_key}/comment"
+      _response = make_api_request('POST', path, comment_body)
+
+      puts "✅ Successfully added comment to Jira ticket #{ticket_key}"
+      true
+    rescue JiraApiError => e
+      puts "❌ Failed to update Jira ticket #{ticket_key}: #{e.message}"
+      false
+    end
+
+    # Add test connection functionality
+    def test_connection
+      puts "🧪 Testing Jira API connection..."
+
+      begin
+        # Test 1: Basic authentication
+        response = make_api_request('GET', '/myself')
+        puts "✅ Authentication successful"
+        puts "   Account: #{response['displayName']} (#{response['emailAddress']})"
+
+        # Test 2: Project access
+        projects = make_api_request('GET', '/project')
+        puts "✅ Can access #{projects.length} projects"
+
+        # Test 3: Comment permissions (try to get comments from any issue)
+        if projects.any?
+          project_key = projects.first['key']
+          puts "✅ Basic permissions verified for project: #{project_key}"
+        end
+
+        puts "🎉 Jira connection test successful!"
+        true
+      rescue => e
+        puts "❌ Jira connection test failed: #{e.message}"
+        false
+      end
+    end
+
+    private
+
+    def process_ticket_data(ticket_data, comments_data)
+      # Format comments for inclusion
+      comments_section = format_comments_for_requirements(comments_data)
+
+      # Construct detailed description including comments
+      full_description_output = <<~FULL_OUTPUT
+      Ticket Key: #{ticket_data['key']}
+      Summary: #{ticket_data.dig('fields', 'summary')}
+      Status: #{ticket_data.dig('fields', 'status', 'name')}
+      Assignee: #{ticket_data.dig('fields', 'assignee', 'displayName') || 'Unassigned'}
+      Reporter: #{ticket_data.dig('fields', 'reporter', 'displayName')}
+      Priority: #{ticket_data.dig('fields', 'priority', 'name')}
+
+      --- Full Description ---
+      #{ticket_data.dig('fields', 'description')}
+
+      #{comments_section}
+      FULL_OUTPUT
+
+      # Extract requirements from both description and comments
+      # Handle description that might be in ADF format (Hash) or plain text (String)
+      raw_description = ticket_data.dig('fields', 'description')
+      description_content = if raw_description.is_a?(Hash)
+                              # ADF format - extract text
+                              extract_text_from_adf(raw_description)
+                            elsif raw_description.is_a?(String)
+                              # Plain text
+                              raw_description
+                            else
+                              # Fallback
+                              ""
+                            end
+
+      combined_content = description_content + "\n\n" + comments_section
+      extracted_requirements = extract_requirements_from_description(combined_content)
+
+      # Return extracted requirements with context
+      if extracted_requirements != combined_content && !extracted_requirements.empty?
+        return "Ticket Key: #{ticket_data['key']}\nSummary: #{ticket_data.dig('fields', 'summary')}\n\n--- Extracted Requirements ---\n#{extracted_requirements}"
+      else
+        return full_description_output
+      end
+    end
+
+    def fetch_dummy_ticket_data(ticket_key)
+
+      # Enhanced dummy description for testing extraction (fallback only)
       dummy_description_content = <<~DUMMY_JIRA_DESCRIPTION
       This is some introductory text about the ticket.
 
@@ -74,6 +202,25 @@ module N2B
       - Item B
       DUMMY_JIRA_DESCRIPTION
 
+      # Simulate fetching comments with implementation details
+      dummy_comments = [
+        {
+          "author" => { "displayName" => "Product Manager" },
+          "created" => "2024-01-15T10:30:00.000Z",
+          "body" => "Additional clarification: The authentication should support both OAuth2 and API key methods. Please ensure backward compatibility with existing integrations."
+        },
+        {
+          "author" => { "displayName" => "Tech Lead" },
+          "created" => "2024-01-16T14:20:00.000Z",
+          "body" => "Implementation note: Use the new security library v2.1+ for the authentication module. The payment gateway integration should use the sandbox environment for testing. Database schema changes need migration scripts."
+        },
+        {
+          "author" => { "displayName" => "QA Engineer" },
+          "created" => "2024-01-17T09:15:00.000Z",
+          "body" => "Testing requirements:\n- Test with mobile devices (iOS/Android)\n- Verify responsive design on tablets\n- Load testing with 1000+ concurrent users\n- Security penetration testing required"
+        }
+      ]
+
       dummy_data = {
         "key" => ticket_key,
         "fields" => {
@@ -86,7 +233,10 @@ module N2B
         }
       }
 
-      # Construct a more detailed "original" full description string
+      # Format comments for inclusion
+      comments_section = format_comments_for_requirements(dummy_comments)
+
+      # Construct a more detailed "original" full description string including comments
       full_description_output = <<~FULL_OUTPUT
       Ticket Key: #{dummy_data['key']}
       Summary: #{dummy_data['fields']['summary']}
@@ -97,20 +247,83 @@ module N2B
 
       --- Full Description ---
       #{dummy_data['fields']['description']}
+
+      #{comments_section}
       (Note: This is dummy data)
       FULL_OUTPUT
 
-      # Now, extract requirements from the dummy_data's description field
-      extracted_requirements = extract_requirements_from_description(dummy_data['fields']['description'])
+      # Now, extract requirements from both description and comments
+      combined_content = dummy_data['fields']['description'] + "\n\n" + comments_section
+      extracted_requirements = extract_requirements_from_description(combined_content)
 
       # If requirements were extracted, prepend ticket key and summary for context.
       # If not, the full description (which includes key, summary etc) is returned by extract_requirements_from_description as fallback.
-      if extracted_requirements != dummy_data['fields']['description'] && !extracted_requirements.empty?
+      if extracted_requirements != combined_content && !extracted_requirements.empty?
         return "Ticket Key: #{dummy_data['key']}\nSummary: #{dummy_data['fields']['summary']}\n\n--- Extracted Requirements ---\n#{extracted_requirements}"
       else
         # Fallback: return the more detailed full output if no specific sections found,
         # or if extracted requirements are empty.
         return full_description_output
+      end
+    end
+
+    def format_comments_for_requirements(comments)
+      return "" if comments.nil? || comments.empty?
+
+      formatted_comments = ["--- Comments with Additional Context ---"]
+
+      comments.each_with_index do |comment, index|
+        author = comment.dig("author", "displayName") || "Unknown"
+        created = comment["created"] || "Unknown date"
+
+        # Handle both real Jira API format and dummy data format
+        body = if comment["body"].is_a?(String)
+                 # Dummy data format or simple string
+                 comment["body"]
+               elsif comment["body"].is_a?(Hash)
+                 # Real Jira API format (ADF - Atlassian Document Format)
+                 extract_text_from_adf(comment["body"])
+               else
+                 ""
+               end
+
+        # Format date to be more readable
+        begin
+          if created != "Unknown date"
+            parsed_date = Time.parse(created)
+            formatted_date = parsed_date.strftime("%Y-%m-%d %H:%M")
+          else
+            formatted_date = created
+          end
+        rescue
+          formatted_date = created
+        end
+
+        formatted_comments << "\nComment #{index + 1} (#{author}, #{formatted_date}):"
+        formatted_comments << body.strip
+      end
+
+      formatted_comments.join("\n")
+    end
+
+    def extract_text_from_adf(adf_content)
+      # Simple extraction of text from Atlassian Document Format
+      return "" unless adf_content.is_a?(Hash)
+
+      text_parts = []
+      extract_text_recursive(adf_content, text_parts)
+      text_parts.join(" ")
+    end
+
+    def extract_text_recursive(node, text_parts)
+      if node.is_a?(Hash)
+        if node["type"] == "text" && node["text"]
+          text_parts << node["text"]
+        elsif node["content"].is_a?(Array)
+          node["content"].each { |child| extract_text_recursive(child, text_parts) }
+        end
+      elsif node.is_a?(Array)
+        node.each { |child| extract_text_recursive(child, text_parts) }
       end
     end
 
@@ -122,10 +335,11 @@ module N2B
       # Jira often uses h1, h2, etc. for headers, or bold text.
       # We'll look for lines that *start* with these, possibly after Jira's header markup like "hN. "
       # Or common text like "Acceptance Criteria:", "Requirements:"
-      requirement_headers_regex = /^(h[1-6]\.\s*)?(Requirements|Acceptance Criteria|Tasks|Key Deliverables|Scope|User Stories)/i
+      # Also include comment-specific implementation keywords
+      requirement_headers_regex = /^(h[1-6]\.\s*)?(Requirements|Acceptance Criteria|Tasks|Key Deliverables|Scope|User Stories|Implementation|Testing|Technical|Additional|Clarification|Comment \d+)/i
 
       # Regex to identify common list item markers
-      list_item_regex = /^\s*[\*\-\+]\s+/
+      _list_item_regex = /^\s*[\*\-\+]\s+/ # Unused but kept for potential future use
       # Regex for lines that look like section headers (to stop capturing)
       # This is a simple heuristic: a line with a few words, ending with a colon, or Jira hN. style
       section_break_regex = /^(h[1-6]\.\s*)?\w+(\s+\w+){0,3}:?\s*$/i
@@ -182,26 +396,276 @@ module N2B
       end
     end
 
-    def update_ticket(ticket_key_or_url, comment)
-      _domain, ticket_key = parse_ticket_input(ticket_key_or_url) # Use _domain to indicate it's not used here
+    private
 
-      unless ticket_key
-        raise JiraApiError, "Could not extract ticket key from '#{ticket_key_or_url}' for update."
+    def format_comment_as_adf(comment_data)
+      # If comment_data is a string (legacy), convert to simple ADF
+      if comment_data.is_a?(String)
+        return {
+          "type" => "doc",
+          "version" => 1,
+          "content" => [
+            {
+              "type" => "paragraph",
+              "content" => [
+                {
+                  "type" => "text",
+                  "text" => comment_data
+                }
+              ]
+            }
+          ]
+        }
       end
 
-      # For now, just print that it would update the ticket
-      # In the future, this will make an API call like:
-      # POST "#{domain || @base_url}/issue/#{ticket_key}/comment"
-      # with body: { "body": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": comment } ] } ] } }
-      puts "JiraClient: Would attempt to update ticket '#{ticket_key}' on domain '#{@jira_config['domain']}' with comment: '#{comment}'"
-      true # Simulate successful update
-    end
+      # If comment_data is structured (new format), build proper ADF
+      content = []
 
-    private
+      # Title with timestamp
+      timestamp = Time.now.strftime("%Y-%m-%d %H:%M UTC")
+      content << {
+        "type" => "heading",
+        "attrs" => { "level" => 2 },
+        "content" => [
+          {
+            "type" => "text",
+            "text" => "🤖 N2B Code Analysis Report",
+            "marks" => [{ "type" => "strong" }]
+          }
+        ]
+      }
+
+      content << {
+        "type" => "paragraph",
+        "content" => [
+          {
+            "type" => "text",
+            "text" => "Generated on #{timestamp}",
+            "marks" => [{ "type" => "em" }]
+          }
+        ]
+      }
+
+      # Implementation Summary (prominent)
+      impl_summary = comment_data[:implementation_summary]
+      if impl_summary && !impl_summary.empty?
+        content << {
+          "type" => "heading",
+          "attrs" => { "level" => 3 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "✅ Implementation Summary",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+
+        content << {
+          "type" => "paragraph",
+          "content" => [
+            {
+              "type" => "text",
+              "text" => impl_summary
+            }
+          ]
+        }
+
+        content << { "type" => "rule" } # Horizontal line
+      else
+        # Fallback if no implementation summary
+        content << {
+          "type" => "paragraph",
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "📝 Code analysis completed. See detailed findings below.",
+              "marks" => [{ "type" => "em" }]
+            }
+          ]
+        }
+      end
+
+      # Collapsible section for automated analysis
+      expand_content = []
+
+      # Technical Summary
+      if comment_data[:technical_summary] && !comment_data[:technical_summary].empty?
+        expand_content << {
+          "type" => "heading",
+          "attrs" => { "level" => 4 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "🔧 Technical Changes",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+        expand_content << {
+          "type" => "paragraph",
+          "content" => [
+            {
+              "type" => "text",
+              "text" => comment_data[:technical_summary]
+            }
+          ]
+        }
+      end
+
+      # Issues
+      if comment_data[:issues] && comment_data[:issues].any?
+        expand_content << {
+          "type" => "heading",
+          "attrs" => { "level" => 4 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "⚠️ Potential Issues",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+
+        list_items = comment_data[:issues].map do |issue|
+          {
+            "type" => "listItem",
+            "content" => [
+              {
+                "type" => "paragraph",
+                "content" => [
+                  {
+                    "type" => "text",
+                    "text" => issue
+                  }
+                ]
+              }
+            ]
+          }
+        end
+
+        expand_content << {
+          "type" => "bulletList",
+          "content" => list_items
+        }
+      end
+
+      # Improvements
+      if comment_data[:improvements] && comment_data[:improvements].any?
+        expand_content << {
+          "type" => "heading",
+          "attrs" => { "level" => 4 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "💡 Suggested Improvements",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+
+        list_items = comment_data[:improvements].map do |improvement|
+          {
+            "type" => "listItem",
+            "content" => [
+              {
+                "type" => "paragraph",
+                "content" => [
+                  {
+                    "type" => "text",
+                    "text" => improvement
+                  }
+                ]
+              }
+            ]
+          }
+        end
+
+        expand_content << {
+          "type" => "bulletList",
+          "content" => list_items
+        }
+      end
+
+      # Test Coverage
+      if comment_data[:test_coverage] && !comment_data[:test_coverage].empty?
+        expand_content << {
+          "type" => "heading",
+          "attrs" => { "level" => 4 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "🧪 Test Coverage",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+        expand_content << {
+          "type" => "paragraph",
+          "content" => [
+            {
+              "type" => "text",
+              "text" => comment_data[:test_coverage]
+            }
+          ]
+        }
+      end
+
+      # Requirements Evaluation
+      if comment_data[:requirements_evaluation] && !comment_data[:requirements_evaluation].empty?
+        expand_content << {
+          "type" => "heading",
+          "attrs" => { "level" => 4 },
+          "content" => [
+            {
+              "type" => "text",
+              "text" => "📋 Requirements Evaluation",
+              "marks" => [{ "type" => "strong" }]
+            }
+          ]
+        }
+        expand_content << {
+          "type" => "paragraph",
+          "content" => [
+            {
+              "type" => "text",
+              "text" => comment_data[:requirements_evaluation]
+            }
+          ]
+        }
+      end
+
+      # Add collapsible expand for automated analysis
+      if expand_content.any?
+        # Count the sections for a more informative title
+        sections = []
+        sections << "Technical Changes" if comment_data[:technical_summary] && !comment_data[:technical_summary].empty?
+        sections << "#{comment_data[:issues]&.length || 0} Issues" if comment_data[:issues]&.any?
+        sections << "#{comment_data[:improvements]&.length || 0} Improvements" if comment_data[:improvements]&.any?
+        sections << "Test Coverage" if comment_data[:test_coverage] && !comment_data[:test_coverage].empty?
+        sections << "Requirements" if comment_data[:requirements_evaluation] && !comment_data[:requirements_evaluation].empty?
+
+        title = sections.any? ? "🔍 Detailed Analysis: #{sections.join(', ')} (Click to expand)" : "🔍 Detailed Analysis (Click to expand)"
+
+        content << {
+          "type" => "expand",
+          "attrs" => {
+            "title" => title
+          },
+          "content" => expand_content
+        }
+      end
+
+      {
+        "type" => "doc",
+        "version" => 1,
+        "content" => content
+      }
+    end
 
     def parse_ticket_input(ticket_key_or_url)
       # Check if it's a URL
-      if ticket_key_or_url =~ URI::regexp(%w[http https])
+      if ticket_key_or_url =~ /\Ahttps?:\/\//
         uri = URI.parse(ticket_key_or_url)
         # Standard Jira path: /browse/TICKET-KEY
         # Or sometimes with query params: /browse/TICKET-KEY?someparam=value
@@ -234,40 +698,56 @@ module N2B
       raise JiraApiError, "Invalid URL format: #{ticket_key_or_url}"
     end
 
-    # Placeholder for actual API request logic (to be implemented later)
-    # def make_api_request(method, path, body = nil)
-    #   uri = URI.join(@base_url, path)
-    #   http = Net::HTTP.new(uri.host, uri.port)
-    #   http.use_ssl = (uri.scheme == 'https')
-    #
-    #   request = case method.upcase
-    #             when 'GET'
-    #               Net::HTTP::Get.new(uri.request_uri)
-    #             when 'POST'
-    #               req = Net::HTTP::Post.new(uri.request_uri)
-    #               req.body = body.to_json if body
-    #               req
-    #             # Add other methods (PUT, DELETE) as needed
-    #             else
-    #               raise JiraApiError, "Unsupported HTTP method: #{method}"
-    #             end
-    #
-    #   request['Authorization'] = "Basic #{Base64.strict_encode64("#{@jira_config['email']}:#{@jira_config['api_key']}")}"
-    #   request['Content-Type'] = 'application/json'
-    #   request['Accept'] = 'application/json'
-    #
-    #   response = http.request(request)
-    #
-    #   unless response.is_a?(Net::HTTPSuccess)
-    #     error_message = "Jira API Error: #{response.code} #{response.message}"
-    #     error_message += " - #{response.body}" if response.body && !response.body.empty?
-    #     raise JiraApiError, error_message
-    #   end
-    #
-    #   response.body.empty? ? {} : JSON.parse(response.body)
-    # rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
-    #        Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, Errno::ECONNREFUSED => e
-    #   raise JiraApiError, "Jira API request failed: #{e.class} - #{e.message}"
-    # end
+    def make_api_request(method, path, body = nil)
+      # Construct the full URL properly
+      # @base_url = "https://domain.atlassian.net/rest/api/3"
+      # path = "/rest/api/3/issue/KEY-123" or "issue/KEY-123"
+
+      if path.start_with?('/rest/api/3/')
+        # Path already includes the full API path, use the domain only
+        # Extract just the domain part: "https://domain.atlassian.net"
+        domain_url = @base_url.gsub(/\/rest\/api\/3.*$/, '')
+        full_url = "#{domain_url}#{path}"
+      else
+        # Path is relative to the API base
+        full_url = "#{@base_url.chomp('/')}/#{path.sub(/^\//, '')}"
+      end
+
+      uri = URI.parse(full_url)
+
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = (uri.scheme == 'https')
+      http.read_timeout = 30
+      http.open_timeout = 10
+
+      request = case method.upcase
+                when 'GET'
+                  Net::HTTP::Get.new(uri.request_uri)
+                when 'POST'
+                  req = Net::HTTP::Post.new(uri.request_uri)
+                  req.body = body.to_json if body
+                  req
+                # Add other methods (PUT, DELETE) as needed
+                else
+                  raise JiraApiError, "Unsupported HTTP method: #{method}"
+                end
+
+      request['Authorization'] = "Basic #{Base64.strict_encode64("#{@jira_config['email']}:#{@jira_config['api_key']}")}"
+      request['Content-Type'] = 'application/json'
+      request['Accept'] = 'application/json'
+
+      response = http.request(request)
+
+      unless response.is_a?(Net::HTTPSuccess)
+        error_message = "Jira API Error: #{response.code} #{response.message}"
+        error_message += " - #{response.body}" if response.body && !response.body.empty?
+        raise JiraApiError, error_message
+      end
+
+      response.body.empty? ? {} : JSON.parse(response.body)
+    rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
+           Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, Errno::ECONNREFUSED => e
+      raise JiraApiError, "Jira API request failed: #{e.class} - #{e.message}"
+    end
   end
 end

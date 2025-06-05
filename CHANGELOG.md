@@ -24,6 +24,22 @@
   - Git branch comparison with auto-detection of main/master branches
   - Enhanced branch validation and error handling for both git and hg
   - Option validation to prevent invalid flag combinations
+0.5.0 Jira Integration & Enhanced Analysis:
+  - Full Jira API integration with real ticket fetching and comment posting
+  - Structured Jira comments using Atlassian Document Format (ADF) with proper formatting
+  - Collapsible sections in Jira comments for clean, professional appearance
+  - Smart requirements extraction from ticket descriptions and comments
+  - Automatic ticket updates with implementation summaries and detailed analysis
+  - Built-in Jira connection testing with n2b-test-jira utility script
+  - Comprehensive permission validation for Jira API tokens
+  - Enhanced configuration validation with user-friendly warnings
+  - Improved model name validation to prevent common input errors
+  - Better error handling for network issues and API failures
+  - Extensive documentation with setup guides and troubleshooting
+  - Test coverage improvements with proper config file isolation
+  - CLI options: --jira, --jira-update, --jira-no-update, --advanced-config
+  - Required Jira permissions: Browse Projects, Browse Issues, View Comments, Add Comments
+
 0.4.0 Flexible Model Configuration System:
   - Centralized model configuration in config/models.yml
   - Support for custom model names across all LLM providers

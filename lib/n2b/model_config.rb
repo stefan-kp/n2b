@@ -98,15 +98,42 @@ module N2B
           return resolve_model(provider, default)
         end
       else
-        # Direct model name input
-        resolved = resolve_model(provider, input)
-        if suggested.key?(input)
-          puts "✓ Using suggested model: #{input} (#{resolved})"
+        # Direct model name input - validate it first
+        if is_valid_model_name?(input)
+          resolved = resolve_model(provider, input)
+          if suggested.key?(input)
+            puts "✓ Using suggested model: #{input} (#{resolved})"
+          else
+            puts "✓ Using custom model: #{resolved}"
+          end
+          return resolved
         else
-          puts "✓ Using custom model: #{resolved}"
+          puts "Invalid model name '#{input}'. Model names should be meaningful (at least 3 characters, no single letters)."
+          puts "Using default model instead."
+          return resolve_model(provider, default)
         end
-        return resolved
       end
+    end
+
+    private
+
+    def self.is_valid_model_name?(input)
+      return false if input.nil? || input.empty?
+
+      # Reject single characters (like 'y', 'n', etc.)
+      return false if input.length == 1
+
+      # Reject very short inputs that are likely not model names
+      return false if input.length < 3
+
+      # Reject common boolean/confirmation inputs
+      return false if %w[y n yes no true false].include?(input.downcase)
+
+      # Reject inputs that are just numbers
+      return false if input.match?(/^\d+$/)
+
+      # Accept anything else as potentially valid
+      true
     end
   end
 end

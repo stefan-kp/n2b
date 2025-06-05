@@ -17,7 +17,7 @@ module N2B
     def get_config(reconfigure: false, advanced_flow: false)
       config = load_config
       api_key = ENV['CLAUDE_API_KEY'] || config['access_key'] # This will be used as default or for existing configs
-      model = config['model'] # Model will be handled per LLM
+      _model = config['model'] # Unused but kept for potential future use # Model will be handled per LLM
 
       # Determine if it's effectively a first-time setup for core LLM details
       is_first_time_core_setup = config['llm'].nil?
@@ -157,6 +157,14 @@ module N2B
           config['privacy']['append_to_shell_history'] = config['append_to_shell_history']
         end
 
+        # Validate configuration before saving
+        validation_errors = validate_config(config)
+        if validation_errors.any?
+          puts "\n⚠️  Configuration validation warnings:"
+          validation_errors.each { |error| puts "  - #{error}" }
+          puts "Configuration saved with warnings."
+        end
+
         puts "\nConfiguration saved to #{CONFIG_FILE}"
         FileUtils.mkdir_p(File.dirname(CONFIG_FILE)) unless File.exist?(File.dirname(CONFIG_FILE))
         File.write(CONFIG_FILE, config.to_yaml)
@@ -175,6 +183,47 @@ module N2B
         config['privacy']['append_to_shell_history'] = config['privacy']['append_to_shell_history'] || current_append_setting
       end
       config
+    end
+
+    private
+
+    def validate_config(config)
+      errors = []
+
+      # Validate LLM configuration
+      if config['llm'].nil? || config['llm'].empty?
+        errors << "LLM provider not specified"
+      end
+
+      # Validate model name
+      if config['model'].nil? || config['model'].empty?
+        errors << "Model not specified"
+      elsif config['model'].length < 3
+        errors << "Model name '#{config['model']}' seems too short - might be invalid"
+      elsif %w[y n yes no true false].include?(config['model'].downcase)
+        errors << "Model name '#{config['model']}' appears to be a boolean response rather than a model name"
+      end
+
+      # Validate API key for non-Ollama providers
+      if config['llm'] != 'ollama' && (config['access_key'].nil? || config['access_key'].empty?)
+        errors << "API key missing for #{config['llm']} provider"
+      end
+
+      # Validate Jira configuration if present
+      if config['jira'] && !config['jira'].empty?
+        jira_config = config['jira']
+        if jira_config['domain'] && !jira_config['domain'].empty?
+          # If domain is set, email and api_key should also be set
+          if jira_config['email'].nil? || jira_config['email'].empty?
+            errors << "Jira email missing when domain is configured"
+          end
+          if jira_config['api_key'].nil? || jira_config['api_key'].empty?
+            errors << "Jira API key missing when domain is configured"
+          end
+        end
+      end
+
+      errors
     end
   end
 end

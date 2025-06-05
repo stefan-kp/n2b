@@ -1,29 +1,92 @@
-# N2B - Natural Language to Bash & Ruby
+# N2B - AI-Powered Code Analysis & Jira Integration
 
 [![Gem Version](https://badge.fury.io/rb/n2b.svg)](https://badge.fury.io/rb/n2b)
 
-N2B (Natural Language to Bash & Ruby) is a Ruby gem that leverages AI to convert natural language instructions into bash commands and Ruby code.
+**Transform your development workflow with intelligent code analysis and seamless Jira integration.** N2B is an AI-powered development tool that revolutionizes code review, requirements compliance, and project management through automated analysis and smart ticket integration.
 
-## Features
+## 🚀 **Key Features**
 
-- **🤖 Natural Language to Commands**: Convert natural language to bash commands
-- **💎 Ruby Code Generation**: Generate Ruby code from natural language instructions
-- **🔍 AI-Powered Diff Analysis**: Analyze git/hg diffs with comprehensive code review
-- **📋 Requirements Compliance**: Check if code changes meet specified requirements
-- **🧪 Test Coverage Assessment**: Evaluate test coverage for code changes
-- **🌿 Branch Comparison**: Compare changes against any branch (main/master/default)
-- **🛠️ VCS Support**: Full support for both Git and Mercurial repositories
-- **📊 Errbit Integration**: Analyze Errbit errors and generate detailed reports
-- **🎫 Scrum Tickets**: Create formatted Scrum tickets from errors
+### 🎯 **Smart Jira Integration**
+- **Automated Ticket Analysis**: Fetch requirements from Jira tickets and analyze code changes against them
+- **Intelligent Updates**: Post beautifully formatted analysis results directly to Jira with collapsible sections
+- **Requirements Extraction**: Automatically identify acceptance criteria, tasks, and requirements from tickets and comments
+- **Real-time Feedback**: Get instant compliance checking and implementation guidance
 
-### 🆕 **New in v0.4.0: Flexible Model Configuration**
+### 🔍 **AI-Powered Code Analysis**
+- **Context-Aware Diff Review**: Intelligent analysis of git/hg changes with comprehensive insights
+- **Requirements Compliance**: Automated verification against project requirements and acceptance criteria
+- **Test Coverage Assessment**: Evaluate test completeness and suggest improvements
+- **Security & Quality Insights**: Identify potential issues, risks, and improvement opportunities
 
-- **🎯 Multiple LLM Providers**: Claude, OpenAI, Gemini, OpenRouter, Ollama
-- **🔧 Custom Models**: Use any model name - fine-tunes, beta models, custom deployments
-- **📋 Suggested Models**: Curated lists of latest models with easy selection
-- **🚀 Latest Models**: OpenAI O3/O4 series, Gemini 2.5, updated OpenRouter models
-- **🔄 Backward Compatible**: Existing configurations continue working seamlessly
-- **⚡ No Restrictions**: Direct API model names accepted without validation
+### 🤖 **Flexible AI Support**
+- **Multiple LLM Providers**: Claude, OpenAI, Gemini, OpenRouter, Ollama
+- **Latest Models**: OpenAI O3/O4 series, Gemini 2.5, Claude Sonnet 4.0
+- **Custom Models**: Support for fine-tuned models, beta releases, and custom deployments
+
+### 💻 **Development Workflow**
+- **Natural Language Commands**: Convert descriptions to executable bash commands
+- **Ruby Code Generation**: Generate Ruby code from natural language instructions
+- **VCS Integration**: Full Git and Mercurial support with branch comparison
+- **Errbit Integration**: Analyze errors and generate actionable reports
+
+## 🎯 **Jira Integration - Get Started in 2 Minutes**
+
+Transform your development workflow with intelligent Jira integration:
+
+### Quick Setup
+
+```bash
+# Install and configure
+gem install n2b
+n2b --advanced-config  # Set up Jira credentials
+
+# Test your connection
+n2b-test-jira
+
+# Analyze code against ticket requirements
+n2b --diff --jira PROJ-123 --jira-update
+```
+
+### What You Get
+
+1. **📥 Smart Ticket Analysis**: Automatically fetches requirements, acceptance criteria, and comments from Jira
+2. **🔍 Intelligent Code Review**: AI analyzes your changes against ticket requirements
+3. **📤 Structured Updates**: Posts beautifully formatted analysis back to Jira with collapsible sections
+4. **✅ Requirements Compliance**: Clear status on what's implemented, partially done, or missing
+
+### Example Workflow
+
+```bash
+# Working on ticket PROJ-123
+git add .
+n2b --diff --jira PROJ-123 --jira-update
+```
+
+**Result**: Your Jira ticket gets updated with a professional analysis comment showing implementation progress, technical insights, and compliance status.
+
+## 🔍 **AI-Powered Code Analysis**
+
+Get comprehensive code review and insights:
+
+```bash
+# Analyze uncommitted changes
+n2b --diff
+
+# Compare against specific branch with requirements
+n2b --diff --branch main --requirements requirements.md
+
+# Full workflow with Jira integration
+n2b --diff --jira PROJ-123 --requirements specs.md
+```
+
+## 🆕 **What's New in v0.5.0**
+
+- **🎯 Full Jira Integration**: Real API integration with ticket fetching and automated updates
+- **📝 Structured Comments**: Beautifully formatted Jira comments with collapsible sections
+- **🔍 Smart Requirements Extraction**: AI identifies requirements from tickets and comments
+- **🧪 Connection Testing**: Built-in `n2b-test-jira` utility for troubleshooting
+- **📋 Permission Validation**: Verifies all required Jira API permissions
+- **⚡ Enhanced Analysis**: Improved code review with better context and insights
 
 ## Installation
 
@@ -31,7 +94,39 @@ N2B (Natural Language to Bash & Ruby) is a Ruby gem that leverages AI to convert
 gem install n2b
 ```
 
-## Usage
+## Quick Start
+
+### 🎯 **For Jira Users** (Most Popular)
+
+```bash
+# Set up Jira integration
+n2b --advanced-config
+
+# Analyze code changes against ticket
+n2b --diff --jira PROJ-123 --jira-update
+```
+
+### 🔍 **For Code Review**
+
+```bash
+# AI-powered diff analysis
+n2b --diff
+
+# Compare against main branch with requirements
+n2b --diff --branch main --requirements specs.md
+```
+
+### 💻 **For Command Generation**
+
+```bash
+# Generate bash commands
+n2b "create a new git repo and push to github"
+
+# Execute commands directly
+n2b -x "backup all .rb files to backup folder"
+```
+
+## Detailed Usage
 
 ### In IRB/Rails Console
 
@@ -232,7 +327,11 @@ Options:
 - `-d` or `--diff`: Analyze git/hg diff with AI-powered code review
 - `-b` or `--branch [BRANCH]`: Compare against specific branch (auto-detects main/master/default)
 - `-r` or `--requirements FILE`: Requirements file for compliance checking
+- `-j` or `--jira TICKET`: Jira ticket ID or URL for context and updates
+- `--jira-update`: Automatically update Jira ticket with analysis (no prompt)
+- `--jira-no-update`: Skip Jira ticket update (analyze only)
 - `-c` or `--config`: Reconfigure the tool
+- `--advanced-config`: Advanced configuration including Jira setup
 - `-h` or `--help`: Display help information
 
 Examples:
@@ -326,6 +425,115 @@ Requirements Evaluation:
 - **Git**: Full support with auto-detection of main/master branches
 - **Mercurial (hg)**: Full support with auto-detection of default branch
 
+## 🎯 Jira Integration
+
+N2B provides seamless integration with Jira for automated ticket analysis and updates.
+
+### Setup
+
+Configure Jira integration using the advanced configuration:
+
+```bash
+n2b --advanced-config
+```
+
+You'll need:
+- **Jira Domain**: Your Atlassian domain (e.g., `company.atlassian.net`)
+- **Email**: Your Jira account email
+- **API Token**: Generate from [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
+
+### Required Jira Permissions
+
+Your API token needs these permissions:
+- **Browse Projects** - Access project list
+- **Browse Issues** - Read ticket details
+- **View Comments** - Read ticket comments
+- **Add Comments** - Post analysis results
+
+### Usage
+
+```bash
+# Analyze code changes against Jira ticket requirements
+n2b --diff --jira PROJ-123
+
+# Use full Jira URL
+n2b --diff --jira https://company.atlassian.net/browse/PROJ-123
+
+# Auto-update ticket without prompt
+n2b --diff --jira PROJ-123 --jira-update
+
+# Analyze only (no ticket update)
+n2b --diff --jira PROJ-123 --jira-no-update
+```
+
+### What It Does
+
+1. **Fetches Ticket Details**: Downloads ticket description and comments
+2. **Extracts Requirements**: Automatically identifies requirements, acceptance criteria, and tasks
+3. **Analyzes Code Changes**: Compares your diff against ticket requirements
+4. **Updates Ticket**: Posts structured analysis comment with:
+   - Implementation summary (what you accomplished)
+   - Technical analysis findings
+   - Potential issues and suggestions
+   - Test coverage assessment
+   - Requirements compliance check
+
+### Example Jira Comment
+
+```
+*N2B Code Analysis Report*
+=========================
+
+*Implementation Summary:*
+Implemented user authentication with JWT tokens, password validation,
+and session management as specified in the ticket requirements.
+
+---
+
+*Automated Analysis Findings:*
+
+*Technical Changes:*
+Added authentication middleware, JWT token generation, and password
+hashing with bcrypt. Updated user model with authentication methods.
+
+*Potential Issues/Risks:*
+• No rate limiting on login attempts
+• Password validation could be stronger
+
+*Suggested Improvements:*
+• Add rate limiting middleware
+• Implement password strength requirements
+• Add two-factor authentication support
+
+*Test Coverage Assessment:*
+Good: Basic authentication flow tested. Missing: Edge cases, security
+scenarios, and JWT expiration handling tests.
+
+*Requirements Evaluation:*
+✅ IMPLEMENTED: User login/logout functionality
+✅ IMPLEMENTED: Password hashing and validation
+⚠️ PARTIALLY IMPLEMENTED: Session management (basic implementation)
+❌ NOT IMPLEMENTED: Two-factor authentication
+```
+
+### Testing Jira Connection
+
+Test your Jira API connection and permissions:
+
+```bash
+# Test basic connection
+n2b-test-jira
+
+# Test specific ticket access
+n2b-test-jira PROJ-123
+```
+
+This will verify:
+- Network connectivity to Jira
+- Authentication with your API token
+- Required permissions
+- Specific ticket access (if provided)
+
 n2r in ruby or rails console
 n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
 only question is mandatory
@@ -385,6 +593,27 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License.
 
+## Version History
+
+### 🚀 **v0.5.0 - Jira Integration & Enhanced Analysis**
+- Full Jira API integration with real ticket fetching and comment posting
+- Structured Jira comments using ADF with collapsible sections
+- Smart requirements extraction from ticket descriptions and comments
+- Built-in connection testing with `n2b-test-jira` utility
+- Enhanced configuration validation and error handling
+
+### 🔧 **v0.4.0 - Flexible Model Configuration**
+- Multiple LLM providers: Claude, OpenAI, Gemini, OpenRouter, Ollama
+- Custom model support for fine-tunes and beta releases
+- Latest models: OpenAI O3/O4 series, Gemini 2.5, Claude Sonnet 4.0
+- Backward compatible configuration system
+
+### 🔍 **v0.3.0 - AI-Powered Diff Analysis**
+- Git/Mercurial diff analysis with context extraction
+- Requirements compliance checking
+- Test coverage assessment
+- Branch comparison with auto-detection
+
 ## Support
 
 If you encounter any issues or have questions, please file an issue on the GitHub repository.
@@ -413,4 +642,4 @@ The generated tickets include:
 - Acceptance criteria
 - Story point estimate
 - Priority level
-- Reference to the original Errbit URL# Test change
+- Reference to the original Errbit URL
