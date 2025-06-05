@@ -78,7 +78,7 @@ module N2B
 
     def test_diff_not_a_vcs_repository # Renamed
       Dir.chdir(@tmp_dir) do
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:none) # Updated stub
 
         ex = assert_raises(SystemExit) { cli_instance.execute }
@@ -96,9 +96,9 @@ module N2B
       Dir.chdir(@tmp_dir) do
         system("git init -q .", chdir: @tmp_dir)
 
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:git)
-        cli_instance.stubs(:execute_vcs_diff).with(:git).returns("")
+        cli_instance.stubs(:execute_vcs_diff).with(:git, nil).returns("")
 
         expected_llm_response = {
           "summary" => "No changes found in the diff.",
@@ -131,9 +131,9 @@ module N2B
 
         sample_diff = "diff --git a/test_file.txt b/test_file.txt\nindex <hash_a>..<hash_b> 100644\n--- a/test_file.txt\n+++ b/test_file.txt\n@@ -1 +1 @@\n-initial content\n+modified content\n"
 
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:git)
-        cli_instance.stubs(:execute_vcs_diff).with(:git).returns(sample_diff)
+        cli_instance.stubs(:execute_vcs_diff).with(:git, nil).returns(sample_diff)
 
         llm_response = {
           "summary" => "Modified test_file.txt",
@@ -166,9 +166,9 @@ module N2B
 
         sample_diff = "diff --git a/test_file.txt b/test_file.txt\nindex <hash_a>..<hash_b> 100644\n--- a/test_file.txt\n+++ b/test_file.txt\n@@ -1 +1 @@\n-initial content\n+modified content\n"
 
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:git)
-        cli_instance.stubs(:execute_vcs_diff).with(:git).returns(sample_diff)
+        cli_instance.stubs(:execute_vcs_diff).with(:git, nil).returns(sample_diff)
 
         # Mock the LLM to raise an API error
         mock_llm_instance = mock('llm_instance')
@@ -198,9 +198,9 @@ module N2B
         File.write(File.join(@tmp_dir, "dummy.txt"), "init\n")
         system("hg add dummy.txt && hg commit -m 'initial commit' -q", chdir: @tmp_dir)
 
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:hg)
-        cli_instance.stubs(:execute_vcs_diff).with(:hg).returns("")
+        cli_instance.stubs(:execute_vcs_diff).with(:hg, nil).returns("")
 
         expected_llm_response = {
           "summary" => "No changes found in the hg diff.",
@@ -234,9 +234,9 @@ module N2B
         # A simplified hg diff output for testing purposes
         sample_hg_diff = "diff -r <rev_hash> test_file.txt\n--- a/test_file.txt\n+++ b/test_file.txt\n@@ -1 +1 @@\n-initial hg content\n+modified hg content\n"
 
-        cli_instance = N2B::CLI.new(['diff'])
+        cli_instance = N2B::CLI.new(['--diff'])
         cli_instance.stubs(:get_vcs_type).returns(:hg)
-        cli_instance.stubs(:execute_vcs_diff).with(:hg).returns(sample_hg_diff)
+        cli_instance.stubs(:execute_vcs_diff).with(:hg, nil).returns(sample_hg_diff)
 
         llm_response = {
           "summary" => "Modified test_file.txt in hg",
@@ -270,10 +270,10 @@ module N2B
         sample_diff_for_security = "diff --git a/test_file.txt b/test_file.txt\n--- a/test_file.txt\n+++ b/test_file.txt\n@@ -1 +1 @@\n-initial content\n+modified content for security review\n"
         user_prompt_text = "focus on security aspects"
 
-        # Simulate CLI arguments: n2b diff "focus on security aspects"
-        cli_instance = N2B::CLI.new(['diff', user_prompt_text])
+        # Simulate CLI arguments: n2b --diff "focus on security aspects"
+        cli_instance = N2B::CLI.new(['--diff', user_prompt_text])
         cli_instance.stubs(:get_vcs_type).returns(:git)
-        cli_instance.stubs(:execute_vcs_diff).with(:git).returns(sample_diff_for_security)
+        cli_instance.stubs(:execute_vcs_diff).with(:git, nil).returns(sample_diff_for_security)
 
         expected_llm_response = {
           "summary" => "Security focused review of test_file.txt",

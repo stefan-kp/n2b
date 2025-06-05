@@ -11,60 +11,44 @@ module N2B
 
     def execute
       config = get_config(reconfigure: @options[:config])
-      command = @args.shift # Get the command, e.g., 'diff'
-      user_input = @args.join(' ') # Remaining args form user input/prompt addition
+      user_input = @args.join(' ') # All remaining args form user input/prompt addition
 
-      if command == 'diff'
-        vcs_type = get_vcs_type
-        if vcs_type == :none
-          puts "Error: Not a git or hg repository."
-          exit 1
-        end
-
-        # Parse --requirements option from @args (which are args after 'diff')
-        requirements_filepath = nil
-        remaining_args_for_prompt = []
-        i = 0
-        while i < @args.length
-          arg = @args[i]
-          if arg.start_with?('--requirements=')
-            requirements_filepath = arg.split('=', 2)[1]
-            i += 1
-          elsif arg == '--requirements' && @args[i+1]
-            requirements_filepath = @args[i+1]
-            i += 2 # Consumed both --requirements and its value
-          else
-            remaining_args_for_prompt << arg
-            i += 1
-          end
-        end
-
-        user_prompt_addition = remaining_args_for_prompt.join(' ')
-
-        requirements_content = nil
-        if requirements_filepath
-          unless File.exist?(requirements_filepath)
-            puts "Error: Requirements file not found: #{requirements_filepath}"
-            exit 1
-          end
-          requirements_content = File.read(requirements_filepath)
-          # For this subtask, requirements_content is read but not yet passed further.
-          # This will be done in a subsequent step.
-        end
-
-        diff_output = execute_vcs_diff(vcs_type)
-        analyze_diff(diff_output, config, user_prompt_addition, requirements_content)
-      elsif command.nil? && user_input.empty? # No command and no input text after options
+      if @options[:diff]
+        handle_diff_analysis(config)
+      elsif user_input.empty? # No input text after options
         puts "Enter your natural language command:"
         input_text = $stdin.gets.chomp
         process_natural_language_command(input_text, config)
-      else # Natural language command (either `command` itself if not 'diff', or `user_input` if `command` was nil but there was text)
-        input_text = command ? "#{command} #{user_input}".strip : user_input
-        process_natural_language_command(input_text, config)
+      else # Natural language command
+        process_natural_language_command(user_input, config)
       end
     end
 
     protected
+
+    def handle_diff_analysis(config)
+      vcs_type = get_vcs_type
+      if vcs_type == :none
+        puts "Error: Not a git or hg repository."
+        exit 1
+      end
+
+      # Get requirements file from parsed options
+      requirements_filepath = @options[:requirements]
+      user_prompt_addition = @args.join(' ') # All remaining args are user prompt addition
+
+      requirements_content = nil
+      if requirements_filepath
+        unless File.exist?(requirements_filepath)
+          puts "Error: Requirements file not found: #{requirements_filepath}"
+          exit 1
+        end
+        requirements_content = File.read(requirements_filepath)
+      end
+
+      diff_output = execute_vcs_diff(vcs_type, @options[:branch])
+      analyze_diff(diff_output, config, user_prompt_addition, requirements_content)
+    end
 
     def get_vcs_type
       if Dir.exist?(File.join(Dir.pwd, '.git'))
@@ -76,15 +60,137 @@ module N2B
       end
     end
 
-    def execute_vcs_diff(vcs_type)
+    def execute_vcs_diff(vcs_type, branch_option = nil)
       case vcs_type
       when :git
-        `git diff HEAD`
+        if branch_option
+          target_branch = branch_option == 'auto' ? detect_git_default_branch : branch_option
+          if target_branch
+            # Validate that the target branch exists
+            unless validate_git_branch_exists(target_branch)
+              puts "Error: Branch '#{target_branch}' does not exist."
+              puts "Available branches:"
+              puts `git branch -a`.lines.map(&:strip).reject(&:empty?)
+              exit 1
+            end
+
+            puts "Comparing current branch against '#{target_branch}'..."
+            `git diff #{target_branch}...HEAD`
+          else
+            puts "Could not detect default branch, falling back to HEAD diff..."
+            `git diff HEAD`
+          end
+        else
+          `git diff HEAD`
+        end
       when :hg
-        `hg diff`
+        if branch_option
+          target_branch = branch_option == 'auto' ? detect_hg_default_branch : branch_option
+          if target_branch
+            # Validate that the target branch exists
+            unless validate_hg_branch_exists(target_branch)
+              puts "Error: Branch '#{target_branch}' does not exist."
+              puts "Available branches:"
+              puts `hg branches`.lines.map(&:strip).reject(&:empty?)
+              exit 1
+            end
+
+            puts "Comparing current branch against '#{target_branch}'..."
+            `hg diff -r #{target_branch}`
+          else
+            puts "Could not detect default branch, falling back to standard diff..."
+            `hg diff`
+          end
+        else
+          `hg diff`
+        end
       else
         "" # Should not happen if get_vcs_type logic is correct and checked before calling
       end
+    end
+
+    def detect_git_default_branch
+      # Try multiple methods to detect the default branch
+
+      # Method 1: Check origin/HEAD symbolic ref
+      result = `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`.strip
+      if $?.success? && !result.empty?
+        return result.split('/').last
+      end
+
+      # Method 2: Check remote show origin
+      result = `git remote show origin 2>/dev/null | grep "HEAD branch"`.strip
+      if $?.success? && !result.empty?
+        match = result.match(/HEAD branch:\s*(\w+)/)
+        return match[1] if match
+      end
+
+      # Method 3: Check if common default branches exist
+      ['main', 'master'].each do |branch|
+        result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
+        if $?.success?
+          return branch
+        end
+      end
+
+      # Method 4: Fallback - check local branches
+      ['main', 'master'].each do |branch|
+        result = `git rev-parse --verify #{branch} 2>/dev/null`
+        if $?.success?
+          return branch
+        end
+      end
+
+      # If all else fails, return nil
+      nil
+    end
+
+    def detect_hg_default_branch
+      # Method 1: Check current branch (if it's 'default', that's the main branch)
+      result = `hg branch 2>/dev/null`.strip
+      if $?.success? && result == 'default'
+        return 'default'
+      end
+
+      # Method 2: Look for 'default' branch in branch list
+      result = `hg branches 2>/dev/null`
+      if $?.success? && result.include?('default')
+        return 'default'
+      end
+
+      # Method 3: Check if there are any branches at all
+      result = `hg branches 2>/dev/null`.strip
+      if $?.success? && !result.empty?
+        # Get the first branch (usually the main one)
+        first_branch = result.lines.first&.split&.first
+        return first_branch if first_branch
+      end
+
+      # Fallback to 'default' (standard hg main branch name)
+      'default'
+    end
+
+    def validate_git_branch_exists(branch)
+      # Check if branch exists locally
+      result = `git rev-parse --verify #{branch} 2>/dev/null`
+      return true if $?.success?
+
+      # Check if branch exists on remote
+      result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
+      return true if $?.success?
+
+      false
+    end
+
+    def validate_hg_branch_exists(branch)
+      # Check if branch exists in hg branches
+      result = `hg branches 2>/dev/null`
+      if $?.success?
+        return result.lines.any? { |line| line.strip.start_with?(branch) }
+      end
+
+      # If we can't list branches, assume it exists (hg is more permissive)
+      true
     end
 
     private
@@ -117,6 +223,24 @@ You are a senior software developer reviewing a code diff.
 Your task is to provide a constructive and detailed analysis of the changes.
 Focus on identifying potential bugs, suggesting improvements in code quality, style, performance, and security.
 Also, provide a concise summary of the changes.
+
+IMPORTANT: When referring to specific issues or improvements, always include:
+- The exact file path (e.g., "lib/n2b/cli.rb")
+- The specific line numbers or line ranges (e.g., "line 42" or "lines 15-20")
+- The exact code snippet you're referring to when possible
+
+This helps users quickly locate and understand the issues you identify.
+
+SPECIAL FOCUS ON TEST COVERAGE:
+Pay special attention to whether the developer has provided adequate test coverage for the changes:
+- Look for new test files or modifications to existing test files
+- Check if new functionality has corresponding tests
+- Evaluate if edge cases and error conditions are tested
+- Assess if the tests are meaningful and comprehensive
+- Note any missing test coverage that should be added
+
+NOTE: In addition to the diff, you will also receive the current code context around the changed areas.
+This provides better understanding of the surrounding code and helps with more accurate analysis.
 The user may provide additional instructions or specific requirements below.
 SYSTEM_PROMPT
 
@@ -128,7 +252,14 @@ SYSTEM_PROMPT
       requirements_section = ""
       if requirements_content && !requirements_content.to_s.strip.empty?
         requirements_section = <<-REQUIREMENTS_BLOCK
-Please pay close attention to the following requirements. You must verify if the code changes align with, implement, or contradict these requirements. Explicitly state how the diff addresses each requirement.
+CRITICAL REQUIREMENTS EVALUATION:
+You must carefully evaluate whether the code changes meet the following requirements from the ticket/task.
+For each requirement, explicitly state whether it is:
+- ✅ IMPLEMENTED: The requirement is fully satisfied by the changes
+- ⚠️ PARTIALLY IMPLEMENTED: The requirement is partially addressed but needs more work
+- ❌ NOT IMPLEMENTED: The requirement is not addressed by these changes
+- 🔍 UNCLEAR: Cannot determine from the diff whether the requirement is met
+
 --- BEGIN REQUIREMENTS ---
 #{requirements_content.strip}
 --- END REQUIREMENTS ---
@@ -138,8 +269,39 @@ REQUIREMENTS_BLOCK
 
       analysis_intro = "Analyze the following diff based on the general instructions above and these specific requirements (if any):"
 
+      # Extract context around changed lines
+      context_sections = extract_code_context_from_diff(diff_output)
+      context_info = ""
+      unless context_sections.empty?
+        context_info = "\n\nCurrent Code Context (for better analysis):\n"
+        context_sections.each do |file_path, sections|
+          context_info += "\n--- #{file_path} ---\n"
+          sections.each do |section|
+            context_info += "Lines #{section[:start_line]}-#{section[:end_line]}:\n"
+            context_info += "```\n#{section[:content]}\n```\n\n"
+          end
+        end
+      end
+
       json_instruction = <<-JSON_INSTRUCTION.strip
-Return your analysis as a JSON object with the keys "summary", "errors" (as a list of strings), and "improvements" (as a list of strings).
+CRITICAL: Return ONLY a valid JSON object with the keys "summary", "errors" (as a list of strings), "improvements" (as a list of strings), "test_coverage" (as a string), and "requirements_evaluation" (as a string, only if requirements were provided).
+Do not include any explanatory text before or after the JSON.
+Each error and improvement should include specific file paths and line numbers.
+
+Example format:
+{
+  "summary": "Brief description of the changes",
+  "errors": [
+    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil",
+    "src/main.js lines 15-20: Missing error handling for async operation"
+  ],
+  "improvements": [
+    "lib/example.rb line 30: Consider using a constant for the magic number 42",
+    "src/utils.py lines 5-10: This method could be simplified using list comprehension"
+  ],
+  "test_coverage": "Good: New functionality in lib/example.rb has corresponding tests in test/example_test.rb. Missing: No tests for error handling edge cases in the new validation method.",
+  "requirements_evaluation": "✅ IMPLEMENTED: User authentication feature is fully implemented in auth.rb. ⚠️ PARTIALLY IMPLEMENTED: Error handling is present but lacks specific error codes. ❌ NOT IMPLEMENTED: Email notifications are not addressed in this diff."
+}
 JSON_INSTRUCTION
 
       full_prompt = [
@@ -148,6 +310,7 @@ JSON_INSTRUCTION
         requirements_section,
         analysis_intro,
         "Diff:\n```\n#{diff_output}\n```",
+        context_info,
         json_instruction
       ].select { |s| s && !s.empty? }.join("\n\n") # Join non-empty sections with double newlines
 
@@ -159,7 +322,9 @@ JSON_INSTRUCTION
       analysis_json_str = call_llm_for_diff_analysis(prompt, config)
 
       begin
-        analysis_result = JSON.parse(analysis_json_str)
+        # Try to extract JSON from response that might have text before it
+        json_content = extract_json_from_response(analysis_json_str)
+        analysis_result = JSON.parse(json_content)
 
         puts "\nCode Diff Analysis:"
         puts "-------------------"
@@ -176,11 +341,110 @@ JSON_INSTRUCTION
         improvements_list = [improvements_list] if improvements_list.is_a?(String) && !improvements_list.empty?
         improvements_list = [] if improvements_list.nil? || (improvements_list.is_a?(String) && improvements_list.empty?)
         puts improvements_list.any? ? improvements_list.map{|imp| "- #{imp}"}.join("\n") : "No improvements suggested."
+
+        puts "\nTest Coverage Assessment:"
+        test_coverage = analysis_result['test_coverage']
+        puts test_coverage && !test_coverage.to_s.strip.empty? ? test_coverage : "No test coverage assessment provided."
+
+        # Show requirements evaluation if requirements were provided
+        requirements_eval = analysis_result['requirements_evaluation']
+        if requirements_eval && !requirements_eval.to_s.strip.empty?
+          puts "\nRequirements Evaluation:"
+          puts requirements_eval
+        end
         puts "-------------------"
       rescue JSON::ParserError => e # Handles cases where the JSON string (even fallback) is malformed
         puts "Critical Error: Failed to parse JSON response for diff analysis: #{e.message}"
         puts "Raw response was: #{analysis_json_str}"
       end
+    end
+
+    def extract_json_from_response(response)
+      # First try to parse the response as-is
+      begin
+        JSON.parse(response)
+        return response
+      rescue JSON::ParserError
+        # If that fails, try to find JSON within the response
+      end
+
+      # Look for JSON object starting with { and ending with }
+      json_start = response.index('{')
+      return response unless json_start
+
+      # Find the matching closing brace
+      brace_count = 0
+      json_end = nil
+      (json_start...response.length).each do |i|
+        case response[i]
+        when '{'
+          brace_count += 1
+        when '}'
+          brace_count -= 1
+          if brace_count == 0
+            json_end = i
+            break
+          end
+        end
+      end
+
+      return response unless json_end
+
+      response[json_start..json_end]
+    end
+
+    def extract_code_context_from_diff(diff_output)
+      context_sections = {}
+      current_file = nil
+
+      diff_output.each_line do |line|
+        line = line.chomp
+
+        # Parse file headers (e.g., "diff --git a/lib/n2b/cli.rb b/lib/n2b/cli.rb")
+        if line.start_with?('diff --git')
+          # Extract file path from "diff --git a/path b/path"
+          match = line.match(/diff --git a\/(.+) b\/(.+)/)
+          current_file = match[2] if match # Use the "b/" path (new file)
+        elsif line.start_with?('+++')
+          # Alternative way to get file path from "+++ b/path"
+          match = line.match(/\+\+\+ b\/(.+)/)
+          current_file = match[1] if match
+        elsif line.start_with?('@@') && current_file
+          # Parse hunk header (e.g., "@@ -10,7 +10,8 @@")
+          match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/)
+          if match
+            old_start = match[1].to_i
+            new_start = match[2].to_i
+
+            # Use the new file line numbers for context
+            context_start = [new_start - 5, 1].max  # 5 lines before, but not less than 1
+            context_end = new_start + 10  # 10 lines after the start
+
+            # Read the actual file content
+            if File.exist?(current_file)
+              file_lines = File.readlines(current_file)
+              # Adjust end to not exceed file length
+              context_end = [context_end, file_lines.length].min
+
+              if context_start <= file_lines.length
+                context_content = file_lines[(context_start-1)...context_end].map.with_index do |content, idx|
+                  line_num = context_start + idx
+                  "#{line_num.to_s.rjust(4)}: #{content.rstrip}"
+                end.join("\n")
+
+                context_sections[current_file] ||= []
+                context_sections[current_file] << {
+                  start_line: context_start,
+                  end_line: context_end,
+                  content: context_content
+                }
+              end
+            end
+          end
+        end
+      end
+
+      context_sections
     end
 
     def call_llm_for_diff_analysis(prompt, config)
@@ -292,7 +556,7 @@ JSON_INSTRUCTION
         { "commands" => ["echo 'LLM API error occurred. Please check your configuration and network.'"], "explanation" => "Failed to connect to the LLM." }
       end
     end
-
+    
     def get_user_shell
       ENV['SHELL'] || `getent passwd #{ENV['USER']}`.split(':')[6]
     end
@@ -382,13 +646,25 @@ JSON_INSTRUCTION
     
 
     def parse_options
-      options = { execute: false, config: nil }
+      options = { execute: false, config: nil, diff: false, requirements: nil, branch: nil }
 
-      OptionParser.new do |opts|
+      parser = OptionParser.new do |opts|
         opts.banner = "Usage: n2b [options] [natural language command]"
 
         opts.on('-x', '--execute', 'Execute the commands after confirmation') do
           options[:execute] = true
+        end
+
+        opts.on('-d', '--diff', 'Analyze git/hg diff with AI') do
+          options[:diff] = true
+        end
+
+        opts.on('-b', '--branch [BRANCH]', 'Compare against branch (default: auto-detect main/master)') do |branch|
+          options[:branch] = branch || 'auto'
+        end
+
+        opts.on('-r', '--requirements FILE', 'Requirements file for diff analysis') do |file|
+          options[:requirements] = file
         end
 
         opts.on('-h', '--help', 'Print this help') do
@@ -399,7 +675,24 @@ JSON_INSTRUCTION
         opts.on('-c', '--config', 'Configure the API key and model') do
           options[:config] = true
         end
-      end.parse!(@args)
+      end
+
+      begin
+        parser.parse!(@args)
+      rescue OptionParser::InvalidOption => e
+        puts "Error: #{e.message}"
+        puts ""
+        puts parser.help
+        exit 1
+      end
+
+      # Validate option combinations
+      if options[:branch] && !options[:diff]
+        puts "Error: --branch option can only be used with --diff"
+        puts ""
+        puts parser.help
+        exit 1
+      end
 
       options
     end
