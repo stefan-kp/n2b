@@ -1,6 +1,7 @@
 require 'net/http'
 require 'json'
 require 'uri'
+require_relative '../model_config'
 
 module N2M
   module Llm
@@ -8,20 +9,20 @@ module N2M
       # Default API URI for Ollama. This might need to be configurable later.
       DEFAULT_OLLAMA_API_URI = 'http://localhost:11434/api/chat'
 
-      # Ollama typically doesn't have a fixed list of models in the same way cloud providers do.
-      # The user specifies the model they have pulled/are running.
-      # We can provide some common examples or allow the user to specify any model name.
-      MODELS = {
-        'llama3' => 'llama3', # Example: Llama 3
-        'mistral' => 'mistral', # Example: Mistral
-        'codellama' => 'codellama' # Example: CodeLlama
-        # Users can specify other models they have available locally
-      }
-
       def initialize(config)
         @config = config
         # Allow overriding the Ollama API URI from config if needed
         @api_uri = URI.parse(@config['ollama_api_url'] || DEFAULT_OLLAMA_API_URI)
+      end
+
+      def get_model_name
+        # Resolve model name using the centralized configuration
+        model_name = N2B::ModelConfig.resolve_model('ollama', @config['model'])
+        if model_name.nil? || model_name.empty?
+          # Fallback to default if no model specified
+          model_name = N2B::ModelConfig.resolve_model('ollama', N2B::ModelConfig.default_model('ollama'))
+        end
+        model_name
       end
 
       def make_request(prompt_content)
@@ -31,7 +32,7 @@ module N2M
         # Ollama expects the model name directly in the request body.
         # It also expects the full message history.
         request.body = JSON.dump({
-          "model" => @config['model'] || MODELS.keys.first, # Use configured model or a default
+          "model" => get_model_name,
           "messages" => [
             {
               "role" => "user",

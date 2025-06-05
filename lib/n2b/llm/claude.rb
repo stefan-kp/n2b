@@ -1,11 +1,22 @@
+require_relative '../model_config'
+
 module N2M
   module Llm
     class Claude
       API_URI = URI.parse('https://api.anthropic.com/v1/messages')
-      MODELS = { 'haiku' =>  'claude-3-haiku-20240307', 'sonnet' => 'claude-3-sonnet-20240229', 'sonnet35' => 'claude-3-5-sonnet-20240620', "sonnet37" => "claude-3-7-sonnet-20250219", "sonnet40" => "claude-sonnet-4-20250514"}
 
       def initialize(config)
         @config = config
+      end
+
+      def get_model_name
+        # Resolve model name using the centralized configuration
+        model_name = N2B::ModelConfig.resolve_model('claude', @config['model'])
+        if model_name.nil? || model_name.empty?
+          # Fallback to default if no model specified
+          model_name = N2B::ModelConfig.resolve_model('claude', N2B::ModelConfig.default_model('claude'))
+        end
+        model_name
       end
 
       def make_request( content)
@@ -16,7 +27,7 @@ module N2M
         request['anthropic-version'] = '2023-06-01'
       
         request.body = JSON.dump({
-          "model" => MODELS[@config['model']],
+          "model" => get_model_name,
           "max_tokens" => 1024,
           "messages" => [
             {
@@ -71,7 +82,7 @@ module N2M
         request['anthropic-version'] = '2023-06-01'
 
         request.body = JSON.dump({
-          "model" => MODELS[@config['model']],
+          "model" => get_model_name,
           "max_tokens" => @config['max_tokens'] || 1024, # Allow overriding max_tokens from config
           "messages" => [
             {

@@ -1,3 +1,5 @@
+require_relative 'model_config'
+
 module N2B
   class Base
 
@@ -32,31 +34,22 @@ module N2B
         llm = 'openrouter' if llm == '4'
         llm = 'ollama' if llm == '5'
 
-        llm_class = case llm
-                    when 'openai'
-                      N2M::Llm::OpenAi
-                    when 'gemini'
-                      N2M::Llm::Gemini
-                    when 'openrouter'
-                      N2M::Llm::OpenRouter
-                    when 'ollama'
-                      N2M::Llm::Ollama
-                    else # Default to Claude
-                      llm = 'claude' # Ensure llm variable is set to 'claude' if it was e.g. nil and defaulted
-                      N2M::Llm::Claude
-                    end
+        # Set default LLM if needed
+        if llm.nil? || llm.empty?
+          llm = 'claude'
+        end
 
         config['llm'] = llm
 
         if llm == 'ollama'
           # Ollama specific configuration
           puts "Ollama typically runs locally and doesn't require an API key."
-          current_model = config['model'] || llm_class::MODELS.keys.first
-          print "Enter the Ollama model to use (e.g., llama3, mistral. Default: #{current_model}): "
-          model_input = $stdin.gets.chomp
-          model = model_input.empty? ? current_model : model_input
-          # For Ollama, access_key is not used. Model is the primary identifier.
-          # We might want to configure Ollama's base URL if it's not the default.
+
+          # Use new model configuration system
+          current_model = config['model']
+          model = N2B::ModelConfig.get_model_choice(llm, current_model)
+
+          # Configure Ollama API URL
           current_ollama_api_url = config['ollama_api_url'] || N2M::Llm::Ollama::DEFAULT_OLLAMA_API_URI
           print "Enter Ollama API base URL (default: #{current_ollama_api_url}): "
           ollama_api_url_input = $stdin.gets.chomp
@@ -76,17 +69,9 @@ module N2B
             exit 1
           end
 
-          current_model = config['model'] || llm_class::MODELS.keys.first
-          print "Choose a model for #{llm} (available: #{llm_class::MODELS.keys.join(', ')}; default: #{current_model}): "
-          model_input = $stdin.gets.chomp
-          model = model_input.empty? ? current_model : model_input
-
-          unless llm_class::MODELS.keys.include?(model)
-            puts "Invalid model for #{llm}. Choose from: #{llm_class::MODELS.keys.join(', ')}"
-            # Attempt to fall back to a default model or prompt again, here we just warn and use default
-            model = llm_class::MODELS.keys.first
-            puts "Using default model: #{model}"
-          end
+          # Use new model configuration system
+          current_model = config['model']
+          model = N2B::ModelConfig.get_model_choice(llm, current_model)
 
           if llm == 'openrouter'
             current_site_url = config['openrouter_site_url'] || ""

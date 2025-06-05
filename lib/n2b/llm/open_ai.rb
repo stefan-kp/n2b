@@ -1,15 +1,25 @@
 require 'net/http'
 require 'json'
 require 'uri'
+require_relative '../model_config'
 
 module N2M
   module Llm
     class OpenAi
       API_URI = URI.parse('https://api.openai.com/v1/chat/completions')
-      MODELS = { 'gpt-4o' =>  'gpt-4o','gpt-4o-mini'=>'gpt-4o-mini', 'gpt-35' => 'gpt-3.5-turbo-1106' }
 
       def initialize(config)
         @config = config
+      end
+
+      def get_model_name
+        # Resolve model name using the centralized configuration
+        model_name = N2B::ModelConfig.resolve_model('openai', @config['model'])
+        if model_name.nil? || model_name.empty?
+          # Fallback to default if no model specified
+          model_name = N2B::ModelConfig.resolve_model('openai', N2B::ModelConfig.default_model('openai'))
+        end
+        model_name
       end
 
       def make_request(content)
@@ -18,7 +28,7 @@ module N2M
         request['Authorization'] = "Bearer #{@config['access_key']}"
 
         request.body = JSON.dump({
-          "model" => MODELS[@config['model']],
+          "model" => get_model_name,
           response_format: { type: 'json_object' },
           "messages" => [
             {
@@ -54,7 +64,7 @@ module N2M
         request['Authorization'] = "Bearer #{@config['access_key']}"
 
         request.body = JSON.dump({
-          "model" => MODELS[@config['model']],
+          "model" => get_model_name,
           "response_format" => { "type" => "json_object" }, # Crucial for OpenAI to return JSON
           "messages" => [
             {

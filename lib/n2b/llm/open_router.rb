@@ -1,25 +1,28 @@
 require 'net/http'
 require 'json'
 require 'uri'
+require_relative '../model_config'
 
 module N2M
   module Llm
     class OpenRouter
-      API_URI = URI.parse('https://openrouter.ai/api/v1/chat/completions') # Adjusted to chat completions endpoint
-      # TODO: Add a more comprehensive list of models or fetch dynamically if possible.
-      # For now, including the one from the example.
-      MODELS = {
-        'openai/gpt-4o' => 'openai/gpt-4o',
-        'google/gemini-flash-1.5' => 'google/gemini-flash-1.5',
-        'anthropic/claude-3-haiku' => 'anthropic/claude-3-haiku'
-        # Add other popular models as needed
-      }
+      API_URI = URI.parse('https://openrouter.ai/api/v1/chat/completions')
 
       def initialize(config)
         @config = config
         @api_key = @config['access_key']
         @site_url = @config['openrouter_site_url'] || '' # Optional: Read from config
         @site_name = @config['openrouter_site_name'] || ''   # Optional: Read from config
+      end
+
+      def get_model_name
+        # Resolve model name using the centralized configuration
+        model_name = N2B::ModelConfig.resolve_model('openrouter', @config['model'])
+        if model_name.nil? || model_name.empty?
+          # Fallback to default if no model specified
+          model_name = N2B::ModelConfig.resolve_model('openrouter', N2B::ModelConfig.default_model('openrouter'))
+        end
+        model_name
       end
 
       def make_request(prompt_content)
@@ -32,7 +35,7 @@ module N2M
         request['X-Title'] = @site_name unless @site_name.empty?
 
         request.body = JSON.dump({
-          "model" => @config['model'] || MODELS.keys.first, # Use configured model or default
+          "model" => get_model_name,
           "messages" => [
             {
               "role" => "user",
@@ -85,7 +88,7 @@ module N2M
 
         # The prompt_content for diff analysis should already instruct the LLM to return JSON.
         request.body = JSON.dump({
-          "model" => @config['model'] || MODELS.keys.first,
+          "model" => get_model_name,
           # "response_format" => { "type" => "json_object" }, # Some models on OpenRouter might support this
           "messages" => [
             {

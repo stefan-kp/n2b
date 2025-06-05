@@ -1,21 +1,29 @@
 require 'net/http'
 require 'json'
 require 'uri'
+require_relative '../model_config'
 
 module N2M
   module Llm
     class Gemini
       API_URI = URI.parse('https://generativelanguage.googleapis.com/v1beta/models')
-      MODELS = { 
-        'gemini-flash' => 'gemini-2.0-flash'
-      }
 
       def initialize(config)
         @config = config
       end
 
+      def get_model_name
+        # Resolve model name using the centralized configuration
+        model_name = N2B::ModelConfig.resolve_model('gemini', @config['model'])
+        if model_name.nil? || model_name.empty?
+          # Fallback to default if no model specified
+          model_name = N2B::ModelConfig.resolve_model('gemini', N2B::ModelConfig.default_model('gemini'))
+        end
+        model_name
+      end
+
       def make_request(content)
-        model = MODELS[@config['model']] || 'gemini-flash'
+        model = get_model_name
         uri = URI.parse("#{API_URI}/#{model}:generateContent?key=#{@config['access_key']}")
         
         request = Net::HTTP::Post.new(uri)
@@ -65,7 +73,7 @@ module N2M
       def analyze_code_diff(prompt_content)
         # This method assumes prompt_content is the full, ready-to-send prompt
         # including all instructions for the LLM (system message, diff, user additions, JSON format).
-        model = MODELS[@config['model']] || 'gemini-flash' # Or a specific model for analysis if different
+        model = get_model_name
         uri = URI.parse("#{API_URI}/#{model}:generateContent?key=#{@config['access_key']}")
 
         request = Net::HTTP::Post.new(uri)

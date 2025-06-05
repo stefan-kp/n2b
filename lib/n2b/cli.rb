@@ -206,6 +206,13 @@ JSON_INSTRUCTION
         response_json_str
       rescue N2B::LlmApiError => e # This catches errors from analyze_code_diff
         puts "Error communicating with the LLM: #{e.message}"
+
+        # Check if it might be a model-related error
+        if e.message.include?('model') || e.message.include?('Model') || e.message.include?('invalid') || e.message.include?('not found')
+          puts "\nThis might be due to an invalid or unsupported model configuration."
+          puts "Run 'n2b -c' to reconfigure your model settings."
+        end
+
         return '{"summary": "Error: Could not analyze diff due to LLM API error.", "errors": [], "improvements": []}'
       end
     end
@@ -274,6 +281,13 @@ JSON_INSTRUCTION
         end
       rescue N2B::LlmApiError => e
         puts "Error communicating with the LLM: #{e.message}"
+
+        # Check if it might be a model-related error
+        if e.message.include?('model') || e.message.include?('Model') || e.message.include?('invalid') || e.message.include?('not found')
+          puts "\nThis might be due to an invalid or unsupported model configuration."
+          puts "Run 'n2b -c' to reconfigure your model settings."
+        end
+
         # This is the fallback for LlmApiError (network, auth, etc.)
         { "commands" => ["echo 'LLM API error occurred. Please check your configuration and network.'"], "explanation" => "Failed to connect to the LLM." }
       end
