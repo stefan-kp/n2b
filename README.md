@@ -235,6 +235,18 @@ You can also set the history file location using the `N2B_HISTORY_FILE` environm
 export N2B_HISTORY_FILE=/path/to/your/history
 ```
 
+### Custom Prompt Templates
+
+N2B's diff analysis prompt is based on text templates. To override them, specify paths in your configuration:
+
+```yaml
+templates:
+  diff_system_prompt: /path/to/my_system_prompt.txt
+  diff_json_instruction: /path/to/my_json_instruction.txt
+```
+
+When these paths are not provided, the built-in templates located in `lib/n2b/templates/` are used.
+
 ## Quick Example N2B
 
 ```
