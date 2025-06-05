@@ -1,5 +1,8 @@
 # N2B Changelog
 
+## 0.5.2 (2025-06-05) - JSON Mode Support
+- Request JSON responses from Claude, Gemini, and OpenAI when appropriate
+
 ## 0.5.1 (2025-06-05) - Bug Fixes
 - Fixed typographical error in gemspec description ("q quick helper" → "a quick helper")
 - Fixed undefined MODELS constant in Ollama LLM client causing runtime errors
