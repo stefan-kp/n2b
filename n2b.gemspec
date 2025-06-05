@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
   spec.license       = "MIT"
 
   spec.files         = Dir.glob("{bin,lib}/**/*") + %w(README.md)
-  spec.executables   = ["n2b"]
+  spec.executables   = ["n2b", "n2b-diff"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "json", "~> 2.0"
