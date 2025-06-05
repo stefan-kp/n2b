@@ -1,5 +1,10 @@
 # N2B Changelog
 
+## 0.5.2 (2025-06-05) - GitHub issue support
+- Added configurable issue tracker selection (Jira or GitHub)
+- Implemented basic GitHub integration with fetch and comment update
+- New `n2b-test-github` script to verify GitHub connectivity
+
 ## 0.5.1 (2025-06-05) - Bug Fixes
 - Fixed typographical error in gemspec description ("q quick helper" → "a quick helper")
 - Fixed undefined MODELS constant in Ollama LLM client causing runtime errors

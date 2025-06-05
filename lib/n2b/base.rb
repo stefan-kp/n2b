@@ -94,26 +94,46 @@ module N2B
 
         if prompt_for_advanced
           puts "\n--- Advanced Settings ---"
-          print "Would you like to configure advanced settings (e.g., Jira integration, privacy)? (y/n) [default: n]: "
+          print "Would you like to configure advanced settings (e.g., Jira or GitHub integration, privacy)? (y/n) [default: n]: "
           choice = $stdin.gets.chomp.downcase
 
           if choice == 'y'
-            # Jira Configuration
-            puts "\n--- Jira Integration ---"
-            puts "You can generate a Jira API token here: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/"
-            config['jira'] ||= {}
-            print "Jira Domain (e.g., your-company.atlassian.net) [current: #{config['jira']['domain']}]: "
-            config['jira']['domain'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['domain'] : val }
+            current_tracker = config['issue_tracker'] || 'none'
+            print "\nSelect issue tracker to integrate (none, jira, github) [current: #{current_tracker}]: "
+            tracker_choice = $stdin.gets.chomp.downcase
+            tracker_choice = current_tracker if tracker_choice.empty?
+            config['issue_tracker'] = tracker_choice
 
-            print "Jira Email Address [current: #{config['jira']['email']}]: "
-            config['jira']['email'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['email'] : val }
+            case tracker_choice
+            when 'jira'
+              puts "\n--- Jira Integration ---"
+              puts "You can generate a Jira API token here: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/"
+              config['jira'] ||= {}
+              print "Jira Domain (e.g., your-company.atlassian.net) [current: #{config['jira']['domain']}]: "
+              config['jira']['domain'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['domain'] : val }
 
-            print "Jira API Token #{config['jira']['api_key'] ? '[leave blank to keep current]' : ''}: "
-            api_token_input = $stdin.gets.chomp
-            config['jira']['api_key'] = api_token_input if !api_token_input.empty?
+              print "Jira Email Address [current: #{config['jira']['email']}]: "
+              config['jira']['email'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['email'] : val }
 
-            print "Default Jira Project Key (optional, e.g., MYPROJ) [current: #{config['jira']['default_project']}]: "
-            config['jira']['default_project'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['default_project'] : val }
+              print "Jira API Token #{config['jira']['api_key'] ? '[leave blank to keep current]' : ''}: "
+              api_token_input = $stdin.gets.chomp
+              config['jira']['api_key'] = api_token_input if !api_token_input.empty?
+
+              print "Default Jira Project Key (optional, e.g., MYPROJ) [current: #{config['jira']['default_project']}]: "
+              config['jira']['default_project'] = $stdin.gets.chomp.then { |val| val.empty? ? config['jira']['default_project'] : val }
+            when 'github'
+              puts "\n--- GitHub Integration ---"
+              config['github'] ||= {}
+              print "GitHub Repository (owner/repo) [current: #{config['github']['repo']}]: "
+              config['github']['repo'] = $stdin.gets.chomp.then { |val| val.empty? ? config['github']['repo'] : val }
+
+              print "GitHub Access Token #{config['github']['access_token'] ? '[leave blank to keep current]' : ''}: "
+              token_input = $stdin.gets.chomp
+              config['github']['access_token'] = token_input if !token_input.empty?
+            else
+              config['jira'] ||= {}
+              config['github'] ||= {}
+            end
 
             # Privacy Settings
             puts "\n--- Privacy Settings ---"
@@ -133,8 +153,9 @@ module N2B
             config['privacy']['append_to_shell_history'] = config['append_to_shell_history'] # Also place under privacy for consistency
 
           else # User chose 'n' for advanced settings
-            # Ensure Jira config is empty or defaults are cleared if user opts out of advanced
-            config['jira'] ||= {} # Ensure it exists
+            config['jira'] ||= {}
+            config['github'] ||= {}
+            config['issue_tracker'] ||= 'none'
             # If they opt out, we don't clear existing, just don't prompt.
             # If it's a fresh setup and they opt out, these will remain empty/nil.
 
@@ -148,7 +169,9 @@ module N2B
           end
         else # Not prompting for advanced (neither advanced_flow nor first_time_core_setup)
           # Ensure defaults for privacy if they don't exist from a previous config
-          config['jira'] ||= {} # Ensure Jira key exists
+          config['jira'] ||= {}
+          config['github'] ||= {}
+          config['issue_tracker'] ||= 'none'
           config['privacy'] ||= {}
           config['privacy']['send_shell_history'] = config['privacy']['send_shell_history'] || false
           config['privacy']['send_llm_history'] = config['privacy']['send_llm_history'] || true
@@ -172,6 +195,8 @@ module N2B
         # If not reconfiguring, still ensure privacy and jira keys exist with defaults if missing
         # This handles configs from before these settings were introduced
         config['jira'] ||= {}
+        config['github'] ||= {}
+        config['issue_tracker'] ||= 'none'
         config['privacy'] ||= {}
         config['privacy']['send_shell_history'] = config['privacy']['send_shell_history'] || false
         config['privacy']['send_llm_history'] = config['privacy']['send_llm_history'] || true
@@ -209,17 +234,31 @@ module N2B
         errors << "API key missing for #{config['llm']} provider"
       end
 
-      # Validate Jira configuration if present
-      if config['jira'] && !config['jira'].empty?
-        jira_config = config['jira']
-        if jira_config['domain'] && !jira_config['domain'].empty?
-          # If domain is set, email and api_key should also be set
-          if jira_config['email'].nil? || jira_config['email'].empty?
-            errors << "Jira email missing when domain is configured"
+      tracker = config['issue_tracker'] || 'none'
+      case tracker
+      when 'jira'
+        if config['jira'] && !config['jira'].empty?
+          jira_config = config['jira']
+          if jira_config['domain'] && !jira_config['domain'].empty?
+            if jira_config['email'].nil? || jira_config['email'].empty?
+              errors << "Jira email missing when domain is configured"
+            end
+            if jira_config['api_key'].nil? || jira_config['api_key'].empty?
+              errors << "Jira API key missing when domain is configured"
+            end
+          else
+            errors << "Jira domain missing"
           end
-          if jira_config['api_key'].nil? || jira_config['api_key'].empty?
-            errors << "Jira API key missing when domain is configured"
-          end
+        else
+          errors << "Jira configuration missing"
+        end
+      when 'github'
+        if config['github'] && !config['github'].empty?
+          gh = config['github']
+          errors << "GitHub repository missing" if gh['repo'].nil? || gh['repo'].empty?
+          errors << "GitHub access token missing" if gh['access_token'].nil? || gh['access_token'].empty?
+        else
+          errors << "GitHub configuration missing"
         end
       end
 

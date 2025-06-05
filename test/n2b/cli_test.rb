@@ -62,6 +62,7 @@ module N2B
           'send_shell_history' => false
         },
         'append_to_shell_history' => false,
+        'issue_tracker' => 'jira',
         # Ensure any other expected keys by N2B::CLI's get_config/config usage are present
       }
       # Stub get_config for any instance of CLI that might be created.

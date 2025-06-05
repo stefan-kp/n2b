@@ -1,4 +1,5 @@
 require_relative 'jira_client' # For N2B::JiraClient
+require_relative 'github_client' # For N2B::GitHubClient
 
 module N2B
   class CLI < Base
@@ -40,45 +41,66 @@ module N2B
       requirements_filepath = @options[:requirements]
       user_prompt_addition = @args.join(' ') # All remaining args are user prompt addition
 
-      # Jira Ticket Information
-      jira_ticket = @options[:jira_ticket]
-      jira_update_flag = @options[:jira_update] # true, false, or nil
+      # Ticket / Issue Information
+      ticket_input = @options[:jira_ticket]
+      ticket_update_flag = @options[:jira_update] # true, false, or nil
 
       requirements_content = nil # Initialize requirements_content
 
-      if jira_ticket
-        puts "Jira ticket specified: #{jira_ticket}"
-        if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
-          begin
-            jira_client = N2B::JiraClient.new(config) # Pass the whole config
-            puts "Fetching Jira ticket details..."
-            # If a requirements file is also provided, the Jira ticket will take precedence.
-            # Or, we could append/prepend. For now, Jira overwrites.
-            requirements_content = jira_client.fetch_ticket(jira_ticket)
-            puts "Successfully fetched Jira ticket details."
-            # The fetched content is now in requirements_content and will be passed to analyze_diff
-          rescue N2B::JiraClient::JiraApiError => e
-            puts "Error fetching Jira ticket: #{e.message}"
-            puts "Proceeding with diff analysis without Jira ticket details."
-          rescue ArgumentError => e # Catches missing Jira config in JiraClient.new
-            puts "Jira configuration error: #{e.message}"
-            puts "Please ensure Jira is configured correctly using 'n2b -c'."
-            puts "Proceeding with diff analysis without Jira ticket details."
-          rescue StandardError => e
-            puts "An unexpected error occurred while fetching Jira ticket: #{e.message}"
-            puts "Proceeding with diff analysis without Jira ticket details."
+      if ticket_input
+        tracker = config['issue_tracker'] || 'jira'
+        case tracker
+        when 'github'
+          puts "GitHub issue specified: #{ticket_input}"
+          if config['github'] && config['github']['repo'] && config['github']['access_token']
+            begin
+              github_client = N2B::GitHubClient.new(config)
+              puts "Fetching GitHub issue details..."
+              requirements_content = github_client.fetch_issue(ticket_input)
+              puts "Successfully fetched GitHub issue details."
+            rescue StandardError => e
+              puts "Error fetching GitHub issue: #{e.message}"
+              puts "Proceeding with diff analysis without GitHub issue details."
+            end
+          else
+            puts "GitHub configuration is missing or incomplete in N2B settings."
+            puts "Please configure GitHub using 'n2b -c' to fetch issue details."
+            puts "Proceeding with diff analysis without GitHub issue details."
+          end
+          if ticket_update_flag == true
+            puts "Note: issue update (--jira-update) is flagged."
+          elsif ticket_update_flag == false
+            puts "Note: issue will not be updated (--jira-no-update)."
           end
         else
-          puts "Jira configuration is missing or incomplete in N2B settings."
-          puts "Please configure Jira using 'n2b -c' to fetch ticket details."
-          puts "Proceeding with diff analysis without Jira ticket details."
-        end
-        # Handling of jira_update_flag can be done elsewhere, e.g., after analysis
-        if jira_update_flag == true
-          puts "Note: Jira ticket update (--jira-update) is flagged."
-          # Actual update logic will be separate
-        elsif jira_update_flag == false
-          puts "Note: Jira ticket will not be updated (--jira-no-update)."
+          puts "Jira ticket specified: #{ticket_input}"
+          if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
+            begin
+              jira_client = N2B::JiraClient.new(config)
+              puts "Fetching Jira ticket details..."
+              requirements_content = jira_client.fetch_ticket(ticket_input)
+              puts "Successfully fetched Jira ticket details."
+            rescue N2B::JiraClient::JiraApiError => e
+              puts "Error fetching Jira ticket: #{e.message}"
+              puts "Proceeding with diff analysis without Jira ticket details."
+            rescue ArgumentError => e
+              puts "Jira configuration error: #{e.message}"
+              puts "Please ensure Jira is configured correctly using 'n2b -c'."
+              puts "Proceeding with diff analysis without Jira ticket details."
+            rescue StandardError => e
+              puts "An unexpected error occurred while fetching Jira ticket: #{e.message}"
+              puts "Proceeding with diff analysis without Jira ticket details."
+            end
+          else
+            puts "Jira configuration is missing or incomplete in N2B settings."
+            puts "Please configure Jira using 'n2b -c' to fetch ticket details."
+            puts "Proceeding with diff analysis without Jira ticket details."
+          end
+          if ticket_update_flag == true
+            puts "Note: Jira ticket update (--jira-update) is flagged."
+          elsif ticket_update_flag == false
+            puts "Note: Jira ticket will not be updated (--jira-no-update)."
+          end
         end
       end
 
@@ -101,50 +123,82 @@ module N2B
       diff_output = execute_vcs_diff(vcs_type, @options[:branch])
       analysis_result = analyze_diff(diff_output, config, user_prompt_addition, requirements_content) # Store the result
 
-      # --- Jira Update Logic ---
-      if jira_ticket && analysis_result && !analysis_result.empty?
-        # Check if Jira config is valid for updating
-        if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
-          jira_comment_data = format_analysis_for_jira(analysis_result)
-          proceed_with_update = false
+      # --- Ticket Update Logic ---
+      if ticket_input && analysis_result && !analysis_result.empty?
+        tracker = config['issue_tracker'] || 'jira'
+        case tracker
+        when 'github'
+          if config['github'] && config['github']['repo'] && config['github']['access_token']
+            comment_data = format_analysis_for_github(analysis_result)
+            proceed_with_update = false
 
-          if jira_update_flag == true # --jira-update used
-            proceed_with_update = true
-          elsif jira_update_flag.nil? # Neither --jira-update nor --jira-no-update used
-            puts "\nWould you like to update Jira ticket #{jira_ticket} with this analysis? (y/n)"
-            user_choice = $stdin.gets.chomp.downcase
-            proceed_with_update = user_choice == 'y'
-          end # If jira_update_flag is false, proceed_with_update remains false
+            if ticket_update_flag == true
+              proceed_with_update = true
+            elsif ticket_update_flag.nil?
+              puts "\nWould you like to update GitHub issue #{ticket_input} with this analysis? (y/n)"
+              user_choice = $stdin.gets.chomp.downcase
+              proceed_with_update = user_choice == 'y'
+            end
 
-          if proceed_with_update
-            begin
-              # Re-instantiate JiraClient or use an existing one if available and in scope
-              # For safety and simplicity here, re-instantiate with current config.
-              update_jira_client = N2B::JiraClient.new(config)
-              puts "Updating Jira ticket #{jira_ticket}..."
-              if update_jira_client.update_ticket(jira_ticket, jira_comment_data)
-                puts "Jira ticket #{jira_ticket} updated successfully."
-              else
-                # update_ticket currently returns true/false, but might raise error for http issues
-                puts "Failed to update Jira ticket #{jira_ticket}. The client did not report an error, but the update may not have completed."
+            if proceed_with_update
+              begin
+                update_client = N2B::GitHubClient.new(config)
+                puts "Updating GitHub issue #{ticket_input}..."
+                if update_client.update_issue(ticket_input, comment_data)
+                  puts "GitHub issue #{ticket_input} updated successfully."
+                else
+                  puts "Failed to update GitHub issue #{ticket_input}."
+                end
+              rescue StandardError => e
+                puts "Error updating GitHub issue: #{e.message}"
               end
-            rescue N2B::JiraClient::JiraApiError => e
-              puts "Error updating Jira ticket: #{e.message}"
-            rescue ArgumentError => e # From JiraClient.new if config is suddenly invalid
-              puts "Jira configuration error before update: #{e.message}"
-            rescue StandardError => e
-              puts "An unexpected error occurred while updating Jira ticket: #{e.message}"
+            else
+              puts "Issue update skipped."
             end
           else
-            puts "Jira ticket update skipped."
+            puts "GitHub configuration is missing or incomplete. Cannot proceed with issue update."
           end
         else
-          puts "Jira configuration is missing or incomplete. Cannot proceed with Jira update."
+          # Jira update logic
+          if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
+            jira_comment_data = format_analysis_for_jira(analysis_result)
+            proceed_with_update = false
+
+            if ticket_update_flag == true
+              proceed_with_update = true
+            elsif ticket_update_flag.nil?
+              puts "\nWould you like to update Jira ticket #{ticket_input} with this analysis? (y/n)"
+              user_choice = $stdin.gets.chomp.downcase
+              proceed_with_update = user_choice == 'y'
+            end
+
+            if proceed_with_update
+              begin
+                update_jira_client = N2B::JiraClient.new(config)
+                puts "Updating Jira ticket #{ticket_input}..."
+                if update_jira_client.update_ticket(ticket_input, jira_comment_data)
+                  puts "Jira ticket #{ticket_input} updated successfully."
+                else
+                  puts "Failed to update Jira ticket #{ticket_input}. The client did not report an error, but the update may not have completed."
+                end
+              rescue N2B::JiraClient::JiraApiError => e
+                puts "Error updating Jira ticket: #{e.message}"
+              rescue ArgumentError => e
+                puts "Jira configuration error before update: #{e.message}"
+              rescue StandardError => e
+                puts "An unexpected error occurred while updating Jira ticket: #{e.message}"
+              end
+            else
+              puts "Jira ticket update skipped."
+            end
+          else
+            puts "Jira configuration is missing or incomplete. Cannot proceed with Jira update."
+          end
         end
-      elsif jira_ticket && (analysis_result.nil? || analysis_result.empty?)
-        puts "Skipping Jira update as analysis result was empty or not generated."
+      elsif ticket_input && (analysis_result.nil? || analysis_result.empty?)
+        puts "Skipping ticket update as analysis result was empty or not generated."
       end
-      # --- End of Jira Update Logic ---
+      # --- End of Ticket Update Logic ---
 
       analysis_result # Return analysis_result from handle_diff_analysis
     end
@@ -498,6 +552,33 @@ JSON_INSTRUCTION
     def format_improvements_for_adf(improvements)
       return [] unless improvements.is_a?(Array) && improvements.any?
       improvements.map(&:strip).reject(&:empty?)
+    end
+
+    def format_analysis_for_github(analysis_result)
+      return "No analysis result available." if analysis_result.nil? || analysis_result.empty?
+
+      lines = []
+      lines << "### Implementation Summary"
+      lines << (analysis_result['ticket_implementation_summary'] || 'N/A')
+      lines << "\n### Technical Summary"
+      lines << (analysis_result['summary'] || 'N/A')
+
+      errors = Array(analysis_result['errors']).map(&:to_s).reject(&:empty?)
+      unless errors.empty?
+        lines << "\n### Issues"
+        errors.each { |e| lines << "- #{e}" }
+      end
+
+      improvements = Array(analysis_result['improvements']).map(&:to_s).reject(&:empty?)
+      unless improvements.empty?
+        lines << "\n### Improvements"
+        improvements.each { |i| lines << "- #{i}" }
+      end
+
+      lines << "\n### Test Coverage"
+      lines << (analysis_result['test_coverage'] || 'N/A')
+
+      lines.join("\n")
     end
 
     def extract_json_from_response(response)
