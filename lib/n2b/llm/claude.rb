@@ -2,7 +2,7 @@ module N2M
   module Llm
     class Claude
       API_URI = URI.parse('https://api.anthropic.com/v1/messages')
-      MODELS = { 'haiku' =>  'claude-3-haiku-20240307', 'sonnet' => 'claude-3-sonnet-20240229', 'sonnet35' => 'claude-3-5-sonnet-20240620', "sonnet37" => "claude-3-7-sonnet-20250219" }
+      MODELS = { 'haiku' =>  'claude-3-haiku-20240307', 'sonnet' => 'claude-3-sonnet-20240229', 'sonnet35' => 'claude-3-5-sonnet-20240620', "sonnet37" => "claude-3-7-sonnet-20250219", "sonnet40" => "claude-sonnet-4-20250514"}
 
       def initialize(config)
         @config = config

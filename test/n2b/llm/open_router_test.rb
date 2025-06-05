@@ -45,10 +45,17 @@ module N2M
         }.to_json
         mock_http_response = MockHTTPResponse.new('200', mock_response_body)
 
-        Net::HTTP.stub :start, mock_http_response do
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           response = @open_router_client_with_headers.make_request(@prompt_content)
           assert_equal({ "commands" => ["echo '42'"], "explanation" => "It is 42." }, response)
         end
+
+        mock_http.verify
       end
 
       def test_make_request_success_without_headers
@@ -58,10 +65,17 @@ module N2M
         }.to_json
         mock_http_response = MockHTTPResponse.new('200', mock_response_body)
 
-        Net::HTTP.stub :start, mock_http_response do
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           response = @open_router_client_without_headers.make_request("list files")
           assert_equal({ "commands" => ["ls"], "explanation" => "List files." }, response)
         end
+
+        mock_http.verify
       end
 
       def test_make_request_success_non_json_content
@@ -71,20 +85,34 @@ module N2M
         }.to_json
         mock_http_response = MockHTTPResponse.new('200', mock_response_body)
 
-        Net::HTTP.stub :start, mock_http_response do
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           response = @open_router_client_with_headers.make_request(@prompt_content)
           assert_equal({ "commands" => ["This is plain text."], "explanation" => "This is plain text." }, response)
         end
+
+        mock_http.verify
       end
 
       def test_make_request_api_error
         mock_http_response = MockHTTPResponse.new('500', 'Internal Server Error', 'Internal Server Error')
 
-        Net::HTTP.stub :start, mock_http_response do
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           assert_raises(N2B::LlmApiError) do
             @open_router_client_with_headers.make_request(@prompt_content)
           end
         end
+
+        mock_http.verify
       end
 
       def test_analyze_code_diff_success
@@ -99,30 +127,42 @@ module N2M
         }.to_json
         mock_http_response = MockHTTPResponse.new('200', mock_response_body)
 
-        Net::HTTP.stub :start, mock_http_response do
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           response = @open_router_client_with_headers.analyze_code_diff("diff content")
           assert_equal expected_json_output, response
         end
+
+        mock_http.verify
       end
 
       def test_analyze_code_diff_api_error
         mock_http_response = MockHTTPResponse.new('401', 'Unauthorized', 'Unauthorized')
-        Net::HTTP.stub :start, mock_http_response do
+
+        # Create a mock HTTP object
+        mock_http = Minitest::Mock.new
+        mock_http.expect(:request, mock_http_response, [Object])
+
+        # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+        Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
           assert_raises(N2B::LlmApiError) do
             @open_router_client_with_headers.analyze_code_diff("diff content")
           end
         end
+
+        mock_http.verify
       end
 
       # Test for header inclusion
       def test_headers_are_set_correctly
-        # Store original Net::HTTP::Post class
-        original_post_class = Net::HTTP::Post
-
         # Define a mock that will be returned by Net::HTTP::Post.new
         mock_post_request_instance = Minitest::Mock.new
+        mock_post_request_instance.expect(:content_type=, nil, ['application/json'])
         mock_post_request_instance.expect(:[]=, nil, ['Authorization', "Bearer test_api_key"])
-        mock_post_request_instance.expect(:[]=, nil, ['Content-Type', 'application/json']) # Corrected from :content_type
         mock_post_request_instance.expect(:[]=, nil, ['HTTP-Referer', @config_with_headers['openrouter_site_url']])
         mock_post_request_instance.expect(:[]=, nil, ['X-Title', @config_with_headers['openrouter_site_name']])
         mock_post_request_instance.expect(:body=, nil, [String])
@@ -131,26 +171,42 @@ module N2M
         Net::HTTP::Post.stub :new, mock_post_request_instance do
           mock_response_body = { "choices" => [{ "message" => { "content" => { "commands" => [], "explanation" => "" }.to_json } }] }.to_json
           mock_http_response = MockHTTPResponse.new('200', mock_response_body)
-          Net::HTTP.stub :start, mock_http_response do
+
+          # Create a mock HTTP object
+          mock_http = Minitest::Mock.new
+          mock_http.expect(:request, mock_http_response, [mock_post_request_instance])
+
+          # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+          Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
             @open_router_client_with_headers.make_request("test")
           end
+
+          mock_http.verify
         end
         mock_post_request_instance.verify
       end
 
       def test_headers_not_set_when_absent_in_config
         mock_post_request_instance = Minitest::Mock.new
+        mock_post_request_instance.expect(:content_type=, nil, ['application/json'])
         mock_post_request_instance.expect(:[]=, nil, ['Authorization', "Bearer test_api_key"])
-        mock_post_request_instance.expect(:[]=, nil, ['Content-Type', 'application/json']) # Corrected from :content_type
         # HTTP-Referer and X-Title should NOT be called on mock_post_request_instance if not in config
         mock_post_request_instance.expect(:body=, nil, [String])
 
         Net::HTTP::Post.stub :new, mock_post_request_instance do
           mock_response_body = { "choices" => [{ "message" => { "content" => { "commands" => [], "explanation" => "" }.to_json } }] }.to_json
           mock_http_response = MockHTTPResponse.new('200', mock_response_body)
-          Net::HTTP.stub :start, mock_http_response do
+
+          # Create a mock HTTP object
+          mock_http = Minitest::Mock.new
+          mock_http.expect(:request, mock_http_response, [mock_post_request_instance])
+
+          # Stub Net::HTTP.start to yield the mock HTTP object and return the response
+          Net::HTTP.stub :start, proc { |*args, &block| block.call(mock_http) } do
             @open_router_client_without_headers.make_request("test")
           end
+
+          mock_http.verify
         end
         mock_post_request_instance.verify
       end

@@ -56,16 +56,29 @@ n2rscrum "Create a user authentication system"
 
 ## Configuration
 
-Create a config file at `~/.n2b/config.yml` with your API keys:
+Create a config file at `~/.n2b/config.yml` with your API keys. You can also use a custom config file by setting the `N2B_CONFIG_FILE` environment variable:
 
+```bash
+export N2B_CONFIG_FILE=/path/to/your/config.yml
+```
+
+Example config file:
 ```yaml
-llm: claude  # or openai
+llm: claude  # or openai, gemini
 claude:
   key: your-anthropic-api-key
   model: claude-3-opus-20240229 # or opus, haiku, sonnet
 openai:
   key: your-openai-api-key
   model: gpt-4 # or gpt-3.5-turbo
+gemini:
+  key: your-google-api-key
+  model: gemini-flash # uses gemini-2.0-flash model
+```
+
+You can also set the history file location using the `N2B_HISTORY_FILE` environment variable:
+```bash
+export N2B_HISTORY_FILE=/path/to/your/history
 ```
 
 ## Quick Example N2B

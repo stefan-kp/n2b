@@ -61,8 +61,6 @@ module N2B
       else # Natural language command (either `command` itself if not 'diff', or `user_input` if `command` was nil but there was text)
         input_text = command ? "#{command} #{user_input}".strip : user_input
         process_natural_language_command(input_text, config)
-      else
-        process_natural_language_command(input_text, config)
       end
     end
 
@@ -266,20 +264,21 @@ JSON_INSTRUCTION
       # which implies it expects a Hash. Let's ensure call_llm returns a Hash.
       # This internal JSON parsing is for the *content* of a successful LLM response.
       # The LlmApiError for network/auth issues should be caught before this.
-      begin
-        parsed_response = JSON.parse(response_json_str)
-        parsed_response
-      rescue JSON::ParserError => e
-        puts "Error parsing LLM response JSON for command generation: #{e.message}"
-        # This is a fallback for when the LLM response *content* is not valid JSON.
-        { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+        begin
+          parsed_response = JSON.parse(response_json_str)
+          parsed_response
+        rescue JSON::ParserError => e
+          puts "Error parsing LLM response JSON for command generation: #{e.message}"
+          # This is a fallback for when the LLM response *content* is not valid JSON.
+          { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+        end
+      rescue N2B::LlmApiError => e
+        puts "Error communicating with the LLM: #{e.message}"
+        # This is the fallback for LlmApiError (network, auth, etc.)
+        { "commands" => ["echo 'LLM API error occurred. Please check your configuration and network.'"], "explanation" => "Failed to connect to the LLM." }
       end
-    rescue N2B::LlmApiError => e
-      puts "Error communicating with the LLM: #{e.message}"
-      # This is the fallback for LlmApiError (network, auth, etc.)
-      { "commands" => ["echo 'LLM API error occurred. Please check your configuration and network.'"], "explanation" => "Failed to connect to the LLM." }
     end
-    
+
     def get_user_shell
       ENV['SHELL'] || `getent passwd #{ENV['USER']}`.split(':')[6]
     end
