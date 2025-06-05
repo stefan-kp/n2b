@@ -1,0 +1,22 @@
+#!/usr/bin/env ruby
+
+require 'yaml'
+require_relative '../lib/n2b/github_client'
+
+config_file = File.expand_path('~/.n2b/config.yml')
+unless File.exist?(config_file)
+  puts "❌ Config file not found: #{config_file}"
+  puts "Please run 'n2b --advanced-config' to set up GitHub integration first."
+  exit 1
+end
+
+config = YAML.load_file(config_file)
+
+begin
+  client = N2B::GitHubClient.new(config)
+rescue => e
+  puts "❌ #{e.message}"
+  exit 1
+end
+
+client.test_connection
