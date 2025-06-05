@@ -195,6 +195,10 @@ JSON_INSTRUCTION
                 N2M::Llm::Claude.new(config)
               when 'gemini'
                 N2M::Llm::Gemini.new(config)
+              when 'openrouter'
+                N2M::Llm::OpenRouter.new(config)
+              when 'ollama'
+                N2M::Llm::Ollama.new(config)
               else
                 # Should not happen if config is validated, but as a safeguard:
                 raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
@@ -223,7 +227,23 @@ JSON_INSTRUCTION
     
     def call_llm(prompt, config)
       begin # Added begin for LlmApiError rescue
-        llm = config['llm'] == 'openai' ?   N2M::Llm::OpenAi.new(config) : N2M::Llm::Claude.new(config)
+        llm_service_name = config['llm']
+        llm = case llm_service_name
+              when 'openai'
+                N2M::Llm::OpenAi.new(config)
+              when 'claude'
+                N2M::Llm::Claude.new(config)
+              when 'gemini'
+                N2M::Llm::Gemini.new(config)
+              when 'openrouter'
+                N2M::Llm::OpenRouter.new(config)
+              when 'ollama'
+                N2M::Llm::Ollama.new(config)
+              else
+                # Fallback or error, though config validation should prevent this
+                puts "Warning: Unsupported LLM service '#{llm_service_name}' configured. Falling back to Claude."
+                N2M::Llm::Claude.new(config)
+              end
 
         # This content is specific to bash command generation
       content = <<-EOF

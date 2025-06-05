@@ -364,6 +364,100 @@ module N2B
       end
     end
 
+    # New Test 1: Natural language command processing (not 'diff')
+    def test_natural_language_command_processing
+      command_text = "list all ruby files"
+      cli_instance = N2B::CLI.new([command_text]) # Simulates `n2b "list all ruby files"`
+
+      expected_llm_commands = {
+        'commands' => ["find . -name '*.rb'"],
+        'explanation' => "This command finds all files with the .rb extension in the current directory and its subdirectories."
+      }
+
+      # Mock the call_llm method itself, as it's the entry point for this type of command
+      cli_instance.expects(:call_llm).with(command_text, @mock_config).returns(expected_llm_commands)
+
+      @mock_config['append_to_shell_history'] = true
+      cli_instance.expects(:add_to_shell_history).with(expected_llm_commands['commands'].join("\n")).once
+
+      cli_instance.execute
+
+      $stdout.rewind
+      actual_output = $stdout.string
+
+      assert_match "Translated #{cli_instance.send(:get_user_shell)} Commands:", actual_output
+      assert_match "------------------------", actual_output
+      assert_match expected_llm_commands['commands'].first, actual_output
+      assert_match "Explanation:", actual_output
+      assert_match expected_llm_commands['explanation'], actual_output
+    end
+
+    # New Test 2: Natural language command processing with -x (execute)
+    def test_natural_language_command_processing_with_execute_option
+      command_text = "create a temp dir"
+      cli_instance = N2B::CLI.new(['-x', command_text])
+
+      expected_llm_commands = {
+        'commands' => ["mkdir /tmp/my_temp_dir"],
+        'explanation' => "Creates a directory named my_temp_dir in /tmp."
+      }
+
+      cli_instance.expects(:call_llm).with(command_text, @mock_config).returns(expected_llm_commands)
+
+      mock_stdin = StringIO.new
+      mock_stdin.puts # Simulate user pressing Enter
+      mock_stdin.rewind
+      original_stdin = $stdin
+      $stdin = mock_stdin
+
+      cli_instance.expects(:system).with(expected_llm_commands['commands'].join("\n")).returns(true).once
+
+      begin
+        cli_instance.execute
+      ensure
+        $stdin = original_stdin
+      end
+
+      $stdout.rewind
+      actual_output = $stdout.string
+
+      assert_match "Translated #{cli_instance.send(:get_user_shell)} Commands:", actual_output
+      assert_match expected_llm_commands['commands'].first, actual_output
+      assert_match "Press Enter to execute these commands, or Ctrl+C to cancel.", actual_output
+    end
+
+    # New Test 3: Config option triggers get_config with reconfigure true
+    def test_config_option_triggers_reconfigure
+      N2B::CLI.any_instance.unstub(:get_config)
+
+      mock_config_for_reconfigure_test = @mock_config.dup
+      # Expect get_config to be called with reconfigure: true on the instance
+      N2B::CLI.any_instance.expects(:get_config).with(reconfigure: true).returns(mock_config_for_reconfigure_test).once
+
+      cli_instance = N2B::CLI.new(['-c'])
+
+      # Stub process_natural_language_command because ARGV will be empty for command part,
+      # leading to interactive input which we don't want in this specific test.
+      cli_instance.stubs(:process_natural_language_command)
+      # Also stub the $stdin.gets for the "Enter your natural language command:" prompt
+      # that occurs if command.nil? && user_input.empty?
+      mock_stdin_empty_command = StringIO.new
+      mock_stdin_empty_command.puts "do nothing" # Provide some input to avoid blocking
+      mock_stdin_empty_command.rewind
+      original_stdin_empty = $stdin
+      $stdin = mock_stdin_empty_command
+
+      begin
+        cli_instance.execute
+      ensure
+        $stdin = original_stdin_empty # Restore original $stdin
+      end
+
+      # Restore the general stub for other tests
+      N2B::CLI.any_instance.unstub(:get_config)
+      N2B::CLI.any_instance.stubs(:get_config).returns(@mock_config)
+    end
+
     private
 
     def create_dummy_requirements_file(filename: "reqs.txt", content: "Default requirement: The code must be efficient.")
