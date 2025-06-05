@@ -6,10 +6,15 @@ N2B (Natural Language to Bash & Ruby) is a Ruby gem that leverages AI to convert
 
 ## Features
 
-- Convert natural language to bash commands
-- Generate Ruby code from natural language instructions
-- Analyze Errbit errors and generate detailed reports
-- Create formatted Scrum tickets from errors
+- **🤖 Natural Language to Commands**: Convert natural language to bash commands
+- **💎 Ruby Code Generation**: Generate Ruby code from natural language instructions
+- **🔍 AI-Powered Diff Analysis**: Analyze git/hg diffs with comprehensive code review
+- **📋 Requirements Compliance**: Check if code changes meet specified requirements
+- **🧪 Test Coverage Assessment**: Evaluate test coverage for code changes
+- **🌿 Branch Comparison**: Compare changes against any branch (main/master/default)
+- **🛠️ VCS Support**: Full support for both Git and Mercurial repositories
+- **📊 Errbit Integration**: Analyze Errbit errors and generate detailed reports
+- **🎫 Scrum Tickets**: Create formatted Scrum tickets from errors
 
 ## Installation
 
@@ -135,6 +140,9 @@ n2b [options] your natural language instruction
 
 Options:
 - `-x` or `--execute`: Execute the generated commands after confirmation
+- `-d` or `--diff`: Analyze git/hg diff with AI-powered code review
+- `-b` or `--branch [BRANCH]`: Compare against specific branch (auto-detects main/master/default)
+- `-r` or `--requirements FILE`: Requirements file for compliance checking
 - `-c` or `--config`: Reconfigure the tool
 - `-h` or `--help`: Display help information
 
@@ -152,6 +160,82 @@ Examples:
 
 ```n2b -c  ```
 
+## 🔍 AI-Powered Diff Analysis
+
+N2B provides comprehensive AI-powered code review for your git and mercurial repositories.
+
+### Basic Diff Analysis
+
+```bash
+# Analyze uncommitted changes
+n2b --diff
+
+# Analyze changes against specific branch
+n2b --diff --branch main
+n2b --diff --branch feature/auth
+
+# Auto-detect default branch (main/master/default)
+n2b --diff --branch
+
+# Short form
+n2b -d -b main
+```
+
+### Requirements Compliance Checking
+
+```bash
+# Check if changes meet requirements
+n2b --diff --requirements requirements.md
+n2b -d -r req.md
+
+# Combine with branch comparison
+n2b --diff --branch main --requirements requirements.md
+```
+
+### What You Get
+
+The AI analysis provides:
+
+- **📝 Summary**: Clear overview of what changed
+- **🚨 Potential Errors**: Bugs, security issues, logic problems with exact file/line references
+- **💡 Suggested Improvements**: Code quality, performance, style recommendations
+- **🧪 Test Coverage Assessment**: Evaluation of test completeness and quality
+- **📋 Requirements Evaluation**: Compliance check with clear status indicators:
+  - ✅ **IMPLEMENTED**: Requirement fully satisfied
+  - ⚠️ **PARTIALLY IMPLEMENTED**: Needs more work
+  - ❌ **NOT IMPLEMENTED**: Not addressed
+  - 🔍 **UNCLEAR**: Cannot determine from diff
+
+### Example Output
+
+```
+Code Diff Analysis:
+-------------------
+Summary:
+Added user authentication with JWT tokens and password validation.
+
+Potential Errors:
+- lib/auth.rb line 42: Password validation allows weak passwords
+- controllers/auth_controller.rb lines 15-20: Missing rate limiting for login attempts
+
+Suggested Improvements:
+- lib/auth.rb line 30: Consider using bcrypt for password hashing
+- spec/auth_spec.rb: Add tests for edge cases and security scenarios
+
+Test Coverage Assessment:
+Good: Basic authentication flow is tested. Missing: No tests for password validation edge cases, JWT expiration handling, or security attack scenarios.
+
+Requirements Evaluation:
+✅ IMPLEMENTED: User login/logout functionality fully working
+⚠️ PARTIALLY IMPLEMENTED: Password strength requirements present but not comprehensive
+❌ NOT IMPLEMENTED: Two-factor authentication not addressed in this diff
+-------------------
+```
+
+### Supported Version Control Systems
+
+- **Git**: Full support with auto-detection of main/master branches
+- **Mercurial (hg)**: Full support with auto-detection of default branch
 
 n2r in ruby or rails console
 n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
@@ -240,4 +324,4 @@ The generated tickets include:
 - Acceptance criteria
 - Story point estimate
 - Priority level
-- Reference to the original Errbit URL
+- Reference to the original Errbit URL# Test change
