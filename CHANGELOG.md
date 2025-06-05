@@ -20,7 +20,7 @@
 - Extensive documentation with setup guides and troubleshooting
 - Test coverage improvements with proper config file isolation
 - CLI options: --jira, --jira-update, --jira-no-update, --advanced-config
-- Required Jira permissions: Browse Projects, Browse Issues, View Comments, Add Comments
+- Required Jira API scopes: read:project:jira, read:issue:jira, read:comment:jira, write:comment:jira
 
 ## 0.4.0 (2025-06-05) - Flexible Model Configuration System
 - Centralized model configuration in config/models.yml

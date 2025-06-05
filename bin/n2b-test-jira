@@ -124,11 +124,11 @@ class JiraConnectionTester
     puts "3️⃣ Testing required permissions..."
 
     begin
-      # Test 1: Project access (Browse Projects permission)
+      # Test 1: Project access (read:project:jira scope)
       response = make_api_request('GET', '/project')
 
       if response.is_a?(Array) && response.length > 0
-        puts "   ✅ Browse Projects: Can access #{response.length} projects"
+        puts "   ✅ Project Access (read:project:jira): Can access #{response.length} projects"
         response.first(3).each do |project|
           puts "     - #{project['key']}: #{project['name']}"
         end
@@ -141,30 +141,30 @@ class JiraConnectionTester
         begin
           issues_response = make_api_request('GET', "/search?jql=project=#{test_project['key']}&maxResults=1")
           if issues_response['issues'] && issues_response['issues'].length > 0
-            puts "   ✅ Browse Issues: Can access issues in #{test_project['key']}"
+            puts "   ✅ Issue Access (read:issue:jira): Can access issues in #{test_project['key']}"
 
             # Test 3: Comment access (if we found an issue)
             test_issue = issues_response['issues'].first
             begin
               comments_response = make_api_request('GET', "/issue/#{test_issue['key']}/comment")
-              puts "   ✅ View Comments: Can access comments on #{test_issue['key']}"
+              puts "   ✅ Comment Access (read:comment:jira): Can access comments on #{test_issue['key']}"
             rescue => e
-              puts "   ❌ View Comments: Cannot access comments (#{e.message})"
+              puts "   ❌ Comment Access (read:comment:jira): Cannot access comments (#{e.message})"
             end
 
             # Test 4: Add comment permission (we won't actually add, just check the endpoint)
-            puts "   ℹ️  Add Comments: Will be tested when actually posting comments"
+            puts "   ℹ️  Comment Creation (write:comment:jira): Will be tested when actually posting comments"
           else
             puts "   ⚠️  No issues found in #{test_project['key']} to test comment permissions"
           end
         rescue => e
-          puts "   ❌ Browse Issues: Cannot search issues (#{e.message})"
+          puts "   ❌ Issue Access (read:issue:jira): Cannot search issues (#{e.message})"
         end
 
         puts
       else
-        puts "   ❌ Browse Projects: No projects accessible"
-        puts "   Your API token needs 'Browse Projects' permission"
+        puts "   ❌ Project Access: No projects accessible"
+        puts "   Your API token needs 'read:project:jira' scope"
         puts
       end
     rescue => e
@@ -173,11 +173,14 @@ class JiraConnectionTester
       puts
     end
 
-    puts "   📋 Required Jira Permissions for N2B:"
-    puts "   • Browse Projects - to access project list"
-    puts "   • Browse Issues - to read ticket details"
-    puts "   • View Comments - to read ticket comments"
-    puts "   • Add Comments - to post analysis results"
+    puts "   📋 Required Jira API Scopes for N2B:"
+    puts "   • read:project:jira - to access project list"
+    puts "   • read:issue:jira - to read ticket details"
+    puts "   • read:comment:jira - to read ticket comments"
+    puts "   • write:comment:jira - to post analysis results"
+    puts
+    puts "   📝 Legacy Permission Names (older Jira versions):"
+    puts "   • Browse Projects, Browse Issues, View Comments, Add Comments"
     puts
   end
 

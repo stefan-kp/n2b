@@ -442,13 +442,22 @@ You'll need:
 - **Email**: Your Jira account email
 - **API Token**: Generate from [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
 
-### Required Jira Permissions
+### Required Jira API Scopes
 
-Your API token needs these permissions:
-- **Browse Projects** - Access project list
-- **Browse Issues** - Read ticket details
-- **View Comments** - Read ticket comments
-- **Add Comments** - Post analysis results
+Your API token needs these specific scopes:
+
+**Essential Scopes:**
+- `read:project:jira` - View projects (access project list)
+- `read:issue:jira` - View issues (fetch ticket details)
+- `read:comment:jira` - View comments (fetch ticket comments for context)
+- `write:comment:jira` - Create and update comments (post analysis results)
+
+**Optional but Recommended:**
+- `read:issue-details:jira` - View detailed issue information
+- `read:issue.property:jira` - View issue properties (comprehensive ticket data)
+
+**Legacy Permission Names (for older Jira versions):**
+- Browse Projects, Browse Issues, View Comments, Add Comments
 
 ### Usage
 
