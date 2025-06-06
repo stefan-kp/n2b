@@ -29,10 +29,11 @@ module N2M
         request.body = JSON.dump({
           "model" => get_model_name,
           "max_tokens" => 1024,
+          "response_format" => { "type" => "json_object" },
           "messages" => [
             {
               "role" => "user",
-              "content" => content 
+              "content" => content
             }
           ]
         })
@@ -44,29 +45,16 @@ module N2M
         if response.code != '200'
           raise N2B::LlmApiError.new("LLM API Error: #{response.code} #{response.message} - #{response.body}")
         end
-        answer = JSON.parse(response.body)['content'].first['text'] 
-        begin 
-          # The llm_response.json file is likely for debugging and can be kept or removed.
-          # For this refactoring, I'll keep it as it doesn't affect the error handling logic.
-          File.open('llm_response.json', 'w') do |f|
-            f.write(answer)
-          end
-          # remove everything before the first { and after the last }
-          
+        answer = JSON.parse(response.body)['content'].first['text']
+        begin
           answer = answer.sub(/.*?\{(.*)\}.*/m, '{\1}') unless answer.start_with?('{')
-          # gsub all \n with \\n that are inside "
-          # 
           answer.gsub!(/"([^"]*)"/) { |match| match.gsub(/\n/, "\\n") }
-          # The llm_response.json file is likely for debugging and can be kept or removed.
-          File.open('llm_response.json', 'w') do |f|
-            f.write(answer)
-          end
           answer = JSON.parse(answer)
         rescue JSON::ParserError
           # This specific JSON parsing error is about the LLM's *response content*, not an API error.
           # It should probably be handled differently, but the subtask is about LlmApiError.
           # For now, keeping existing behavior for this part.
-          puts "Error parsing JSON from LLM response: #{answer}" # Clarified error message
+          puts "Error parsing JSON from LLM response: #{answer}"
           answer = { 'explanation' => answer} # Default fallback
         end
         answer
@@ -83,10 +71,11 @@ module N2M
 
         request.body = JSON.dump({
           "model" => get_model_name,
-          "max_tokens" => @config['max_tokens'] || 1024, # Allow overriding max_tokens from config
+          "max_tokens" => @config['max_tokens'] || 1024,
+          "response_format" => { "type" => "json_object" },
           "messages" => [
             {
-              "role" => "user", # The entire prompt is passed as a single user message
+              "role" => "user",
               "content" => prompt_content
             }
           ]

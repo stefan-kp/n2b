@@ -34,7 +34,10 @@ module N2M
             "parts" => [{
               "text" => content
             }]
-          }]
+          }],
+          "generationConfig" => {
+            "responseMimeType" => "application/json"
+          }
         })
 
         response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
@@ -82,14 +85,12 @@ module N2M
         request.body = JSON.dump({
           "contents" => [{
             "parts" => [{
-              "text" => prompt_content # The entire prompt is passed as text
+              "text" => prompt_content
             }]
           }],
-          # Gemini specific: Ensure JSON output if possible via generationConfig
-          # However, the primary method is instructing it within the prompt itself.
-          # "generationConfig": {
-          #   "responseMimeType": "application/json", # This might be too restrictive or not always work as expected
-          # }
+          "generationConfig" => {
+            "responseMimeType" => "application/json"
+          }
         })
 
         response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
