@@ -29,7 +29,6 @@ module N2M
         request.body = JSON.dump({
           "model" => get_model_name,
           "max_tokens" => 1024,
-          "response_format" => { "type" => "json_object" },
           "messages" => [
             {
               "role" => "user",
@@ -72,7 +71,6 @@ module N2M
         request.body = JSON.dump({
           "model" => get_model_name,
           "max_tokens" => @config['max_tokens'] || 1024,
-          "response_format" => { "type" => "json_object" },
           "messages" => [
             {
               "role" => "user",

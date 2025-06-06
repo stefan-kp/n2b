@@ -21,7 +21,7 @@ module N2M
         @client = Claude.new(@config)
       end
 
-      def test_make_request_includes_response_format_and_parses_json
+      def test_make_request_parses_json_without_response_format
         resp_body = { 'content' => [ { 'text' => { 'commands' => ['echo hi'], 'explanation' => 'hi' }.to_json } ] }.to_json
         http_resp = MockHTTPResponse.new('200', resp_body)
 
@@ -31,7 +31,8 @@ module N2M
         mock_post.expect(:[]=, nil, ['anthropic-version', '2023-06-01'])
         mock_post.expect(:body=, nil) do |body|
           data = JSON.parse(body)
-          assert_equal({ 'type' => 'json_object' }, data['response_format'])
+          # Claude doesn't support response_format parameter
+          refute data.key?('response_format')
         end
 
         mock_http = Minitest::Mock.new

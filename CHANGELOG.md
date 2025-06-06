@@ -1,5 +1,10 @@
 # N2B Changelog
 
+## 0.5.3 (2025-06-05) - Critical Bug Fix
+- Fixed Claude API error: Removed unsupported response_format parameter
+- Claude (Anthropic) doesn't support JSON mode like OpenAI does
+- Updated tests to reflect correct Claude API behavior
+
 ## 0.5.2 (2025-06-05) - JSON Mode Support
 - Request JSON responses from Claude, Gemini, and OpenAI when appropriate
 
