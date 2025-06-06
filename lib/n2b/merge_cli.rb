@@ -91,9 +91,9 @@ module N2B
       loop do
         print_conflict(block)
         print_suggestion(suggestion)
-        print 'Accept [y], Skip [n], Comment [c], Abort [a]: '
+        print "#{COLOR_YELLOW}Accept [y], Skip [n], Comment [c], Abort [a] (explicit choice required): #{COLOR_RESET}"
         choice = $stdin.gets&.strip&.downcase
-        choice = 'y' if choice.nil? || choice.empty?
+
         case choice
         when 'y'
           return {accepted: true, merged_code: suggestion['merged_code'], reason: suggestion['reason'], comment: comment}
@@ -102,11 +102,15 @@ module N2B
         when 'c'
           puts 'Enter comment (end with blank line):'
           comment = read_multiline_input
-          suggestion = request_merge(block, config, comment)
+          puts "#{COLOR_YELLOW}🤖 AI is analyzing your comment and generating new suggestion...#{COLOR_RESET}"
+          suggestion = request_merge_with_spinner(block, config, comment)
+          puts "#{COLOR_GREEN}✅ New suggestion ready!#{COLOR_RESET}\n"
         when 'a'
           return {abort: true, merged_code: suggestion['merged_code'], reason: suggestion['reason'], comment: comment}
+        when '', nil
+          puts "#{COLOR_RED}Please enter a valid choice: y/n/c/a#{COLOR_RESET}"
         else
-          puts 'Invalid option.'
+          puts "#{COLOR_RED}Invalid option. Please enter: y (accept), n (skip), c (comment), or a (abort)#{COLOR_RESET}"
         end
       end
     end
@@ -119,6 +123,30 @@ module N2B
         parsed
       rescue JSON::ParserError
         { 'merged_code' => '', 'reason' => 'Invalid LLM response' }
+      end
+    end
+
+    def request_merge_with_spinner(block, config, comment)
+      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+      spinner_thread = Thread.new do
+        i = 0
+        while true
+          print "\r#{COLOR_BLUE}#{spinner_chars[i % spinner_chars.length]} Processing...#{COLOR_RESET}"
+          $stdout.flush
+          sleep(0.1)
+          i += 1
+        end
+      end
+
+      begin
+        result = request_merge(block, config, comment)
+        spinner_thread.kill
+        print "\r#{' ' * 20}\r"  # Clear the spinner line
+        result
+      rescue => e
+        spinner_thread.kill
+        print "\r#{' ' * 20}\r"  # Clear the spinner line
+        { 'merged_code' => '', 'reason' => "Error: #{e.message}" }
       end
     end
 
@@ -172,12 +200,19 @@ module N2B
 
     def read_multiline_input
       lines = []
+      puts "#{COLOR_GRAY}(Type your comment, then press Enter on an empty line to finish)#{COLOR_RESET}"
       while (line = $stdin.gets)
         line = line.chomp
         break if line.empty?
         lines << line
       end
-      lines.join("\n")
+      comment = lines.join("\n")
+      if comment.empty?
+        puts "#{COLOR_YELLOW}No comment entered.#{COLOR_RESET}"
+      else
+        puts "#{COLOR_GREEN}Comment received: #{comment.length} characters#{COLOR_RESET}"
+      end
+      comment
     end
 
     def print_conflict(block)

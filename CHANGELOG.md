@@ -1,5 +1,20 @@
 # N2B Changelog
 
+## 0.5.5 (2025-06-06) - Critical UX Fixes for n2b-diff
+
+### 🐛 Critical Bug Fixes
+- **Fixed accidental merge acceptance**: Empty input no longer defaults to 'y' (accept)
+- **Explicit confirmation required**: Users must type 'y', 'n', 'c', or 'a' explicitly
+- **Added loading indicator**: Animated spinner shows when AI is processing comments
+- **Improved comment workflow**: Clear instructions and feedback for multiline input
+- **Better error messages**: Clearer prompts and validation messages
+
+### ✨ UX Improvements
+- **Visual feedback**: Colored status messages and progress indicators
+- **Safer defaults**: No accidental actions from pressing Enter repeatedly
+- **Comment confirmation**: Shows character count when comment is received
+- **Processing visibility**: Users know when AI is working vs waiting for input
+
 ## 0.5.4 (2025-06-06) - AI-Powered Merge Conflict Resolver + Critical Fixes
 
 ### 🔧 NEW FEATURE: n2b-diff Command
