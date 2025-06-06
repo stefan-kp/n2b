@@ -1,5 +1,52 @@
 # N2B Changelog
 
+## 0.7.0 (2025-01-06) - Jira Template System & Interactive Checklists
+
+### 🎯 Full Template Engine
+- **Complete templating system**: Variables, loops, conditionals for maximum flexibility
+- **Jira-optimized templates**: Native checkbox support and collapsible sections
+- **Smart error classification**: Automatic severity detection (Critical/Important/Low)
+- **File reference extraction**: Intelligent parsing of file paths and line numbers
+- **Git/Mercurial integration**: Automatic branch and diff stats extraction
+
+### ☐ Interactive Jira Checklists
+- **Native Jira checkboxes**: ☐ (unchecked) and ☑ (checked) for team collaboration
+- **Collapsible sections**: `{expand:Title}...{expand}` for organized findings
+- **Severity-based grouping**: Critical Issues, Important Issues, Improvements
+- **Requirements tracking**: Status-based checklist (✅ Implemented, ⚠️ Partial, ❌ Not Done)
+- **Test coverage gaps**: Actionable checklist items for missing tests
+
+### 🔧 Template Features
+- **Variables**: `{implementation_summary}`, `{timestamp}`, `{branch_name}`
+- **Loops**: `{#each critical_errors}...{/each}` for dynamic content
+- **Conditionals**: `{#if status == 'IMPLEMENTED'}...{/if}` for smart display
+- **File references**: Automatic `*file.rb:42*` formatting with line numbers
+- **Git integration**: Auto-extract branch, files changed, lines added/removed
+
+### 📋 Default Template Structure
+```
+*N2B Code Analysis Report*
+{expand:🚨 Critical Issues (Must Fix Before Merge)}
+☐ *app/auth.rb:42* - SQL injection vulnerability
+{expand}
+
+{expand:⚠️ Important Issues (Should Address)}
+☐ *controllers/auth.rb:15* - Missing rate limiting
+{expand}
+
+*📋 Requirements Evaluation:*
+☑ ✅ *IMPLEMENTED:* User authentication working
+☐ ⚠️ *PARTIALLY IMPLEMENTED:* Password validation
+☐ ❌ *NOT IMPLEMENTED:* Two-factor authentication
+```
+
+### 🎯 Team Collaboration Benefits
+- **Trackable progress**: Team members check off resolved items
+- **Organized findings**: Collapsible sections prevent overwhelming comments
+- **Clear priorities**: Critical vs Important vs Nice-to-have separation
+- **Actionable items**: Each finding becomes a trackable task
+- **Professional presentation**: Clean, structured Jira comments
+
 ## 0.6.1 (2025-06-06) - Editor Integration
 
 ### 🔧 Editor Integration

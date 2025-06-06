@@ -67,9 +67,12 @@ module N2B
 
       puts "Updating Jira ticket #{ticket_key} with analysis comment..."
 
+      # Generate comment using template system
+      template_comment = generate_templated_comment(comment)
+
       # Prepare the comment body in Jira's Atlassian Document Format (ADF)
       comment_body = {
-        "body" => format_comment_as_adf(comment)
+        "body" => format_comment_as_adf(template_comment)
       }
 
       # Make the API call to add a comment
@@ -396,26 +399,347 @@ module N2B
       end
     end
 
+    def generate_templated_comment(comment_data)
+      # Prepare template data from the analysis results
+      template_data = prepare_template_data(comment_data)
+
+      # Load and render template
+      config = get_config(reconfigure: false, advanced_flow: false)
+      template_path = resolve_template_path('jira_comment', config)
+      template_content = File.read(template_path)
+
+      engine = N2B::TemplateEngine.new(template_content, template_data)
+      engine.render
+    end
+
+    def prepare_template_data(comment_data)
+      # Extract and classify errors by severity
+      errors = comment_data[:issues] || []
+      critical_errors = []
+      important_errors = []
+      low_errors = []
+
+      errors.each do |error|
+        severity = classify_error_severity(error)
+        file_ref = extract_file_reference(error)
+
+        error_item = {
+          'file_reference' => file_ref,
+          'description' => clean_error_description(error),
+          'severity' => severity
+        }
+
+        case severity
+        when 'CRITICAL'
+          critical_errors << error_item
+        when 'IMPORTANT'
+          important_errors << error_item
+        else
+          low_errors << error_item
+        end
+      end
+
+      # Process improvements
+      improvements = (comment_data[:improvements] || []).map do |improvement|
+        {
+          'file_reference' => extract_file_reference(improvement),
+          'description' => clean_error_description(improvement)
+        }
+      end
+
+      # Process missing tests
+      missing_tests = extract_missing_tests(comment_data[:test_coverage] || "")
+
+      # Process requirements
+      requirements = extract_requirements_status(comment_data[:requirements_evaluation] || "")
+
+      # Get git/hg info
+      git_info = extract_git_info
+
+      {
+        'implementation_summary' => comment_data[:implementation_summary] || "Code analysis completed",
+        'critical_errors' => critical_errors,
+        'important_errors' => important_errors,
+        'improvements' => improvements,
+        'missing_tests' => missing_tests,
+        'requirements' => requirements,
+        'test_coverage_summary' => comment_data[:test_coverage] || "No specific test coverage analysis available",
+        'timestamp' => Time.now.strftime("%Y-%m-%d %H:%M UTC"),
+        'branch_name' => git_info[:branch],
+        'files_changed' => git_info[:files_changed],
+        'lines_added' => git_info[:lines_added],
+        'lines_removed' => git_info[:lines_removed],
+        'critical_errors_empty' => critical_errors.empty?,
+        'important_errors_empty' => important_errors.empty?,
+        'improvements_empty' => improvements.empty?,
+        'missing_tests_empty' => missing_tests.empty?
+      }
+    end
+
+    def classify_error_severity(error_text)
+      text = error_text.downcase
+      case text
+      when /security|sql injection|xss|csrf|vulnerability|exploit|attack/
+        'CRITICAL'
+      when /performance|n\+1|timeout|memory leak|slow query|bottleneck/
+        'IMPORTANT'
+      when /error|exception|bug|fail|crash|break/
+        'IMPORTANT'
+      when /style|convention|naming|format|indent|space/
+        'LOW'
+      else
+        'IMPORTANT'
+      end
+    end
+
+    def extract_file_reference(text)
+      # Parse various file reference formats
+      if match = text.match(/(\S+\.(?:rb|js|py|java|cpp|c|h|ts|jsx|tsx|php|go|rs|swift|kt))(?:\s+(?:line|lines?)\s+(\d+(?:-\d+)?)|:(\d+(?:-\d+)?)|\s*\(line\s+(\d+)\))?/i)
+        file = match[1]
+        line = match[2] || match[3] || match[4]
+        line ? "*#{file}:#{line}*" : "*#{file}*"
+      else
+        "*General*"
+      end
+    end
+
+    def clean_error_description(text)
+      # Remove file references from description to avoid duplication
+      text.gsub(/\S+\.(?:rb|js|py|java|cpp|c|h|ts|jsx|tsx|php|go|rs|swift|kt)(?:\s+(?:line|lines?)\s+\d+(?:-\d+)?|:\d+(?:-\d+)?|\s*\(line\s+\d+\))?:?\s*/i, '').strip
+    end
+
+    def extract_missing_tests(test_coverage_text)
+      # Extract test-related items from coverage analysis
+      missing_tests = []
+
+      # Look for common patterns indicating missing tests
+      test_coverage_text.scan(/(?:missing|need|add|require).*?test.*?(?:\.|$)/i) do |match|
+        missing_tests << { 'description' => match.strip }
+      end
+
+      # If no specific missing tests found, create generic ones based on coverage
+      if missing_tests.empty? && test_coverage_text.include?('%')
+        if coverage_match = test_coverage_text.match(/(\d+)%/)
+          coverage = coverage_match[1].to_i
+          if coverage < 80
+            missing_tests << { 'description' => "Increase test coverage from #{coverage}% to target 80%+" }
+          end
+        end
+      end
+
+      missing_tests
+    end
+
+    def extract_requirements_status(requirements_text)
+      requirements = []
+
+      # Parse requirements with status indicators
+      requirements_text.scan(/(✅|⚠️|❌|🔍)?\s*(IMPLEMENTED|PARTIALLY IMPLEMENTED|NOT IMPLEMENTED|UNCLEAR)?:?\s*(.+?)(?=\n|$)/i) do |status_emoji, status_text, description|
+        status = case
+                when status_emoji == '✅' || status_text&.include?('IMPLEMENTED') && !status_text&.include?('NOT')
+                  'IMPLEMENTED'
+                when status_emoji == '⚠️' || status_text&.include?('PARTIALLY')
+                  'PARTIALLY_IMPLEMENTED'
+                when status_emoji == '❌' || status_text&.include?('NOT IMPLEMENTED')
+                  'NOT_IMPLEMENTED'
+                else
+                  'UNCLEAR'
+                end
+
+        requirements << {
+          'status' => status,
+          'description' => description.strip,
+          'status_icon' => status_emoji || (status == 'IMPLEMENTED' ? '✅' : status == 'PARTIALLY_IMPLEMENTED' ? '⚠️' : status == 'NOT_IMPLEMENTED' ? '❌' : '🔍')
+        }
+      end
+
+      requirements
+    end
+
+    def extract_git_info
+      begin
+        if File.exist?('.git')
+          branch = `git branch --show-current 2>/dev/null`.strip
+          branch = 'unknown' if branch.empty?
+
+          # Get diff stats
+          diff_stats = `git diff --stat HEAD~1 2>/dev/null`.strip
+          files_changed = diff_stats.scan(/(\d+) files? changed/).flatten.first || "0"
+          lines_added = diff_stats.scan(/(\d+) insertions?/).flatten.first || "0"
+          lines_removed = diff_stats.scan(/(\d+) deletions?/).flatten.first || "0"
+        elsif File.exist?('.hg')
+          branch = `hg branch 2>/dev/null`.strip
+          branch = 'default' if branch.empty?
+
+          # Get diff stats for hg
+          diff_stats = `hg diff --stat 2>/dev/null`.strip
+          files_changed = diff_stats.lines.count.to_s
+          lines_added = "0"  # hg diff --stat doesn't show +/- easily
+          lines_removed = "0"
+        else
+          branch = 'unknown'
+          files_changed = "0"
+          lines_added = "0"
+          lines_removed = "0"
+        end
+      rescue
+        branch = 'unknown'
+        files_changed = "0"
+        lines_added = "0"
+        lines_removed = "0"
+      end
+
+      {
+        branch: branch,
+        files_changed: files_changed,
+        lines_added: lines_added,
+        lines_removed: lines_removed
+      }
+    end
+
+    def resolve_template_path(template_key, config)
+      user_path = config.dig('templates', template_key) if config.is_a?(Hash)
+      return user_path if user_path && File.exist?(user_path)
+
+      File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
+    end
+
+    def get_config(reconfigure: false, advanced_flow: false)
+      # This should match the config loading from the main CLI
+      # For now, return empty hash - will be enhanced when config system is unified
+      {}
+    end
+
+    def convert_markdown_to_adf(markdown_text)
+      content = []
+      lines = markdown_text.split("\n")
+      current_paragraph = []
+
+      lines.each do |line|
+        case line
+        when /^\*(.+)\*$/  # Bold headers like *N2B Code Analysis Report*
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+
+          content << {
+            "type" => "heading",
+            "attrs" => { "level" => 2 },
+            "content" => [
+              {
+                "type" => "text",
+                "text" => $1.strip,
+                "marks" => [{ "type" => "strong" }]
+              }
+            ]
+          }
+        when /^=+$/  # Separator lines
+          # Skip separator lines
+        when /^\{expand:(.+)\}$/  # Jira expand start
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+
+          # Create expand section
+          expand_title = $1.strip
+          content << {
+            "type" => "expand",
+            "attrs" => { "title" => expand_title },
+            "content" => []
+          }
+        when /^\{expand\}$/  # Jira expand end
+          # End of expand section - handled by the expand start
+        when /^☐\s+(.+)$/  # Unchecked checkbox
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+
+          content << {
+            "type" => "taskList",
+            "content" => [
+              {
+                "type" => "taskItem",
+                "attrs" => { "state" => "TODO" },
+                "content" => [
+                  create_paragraph($1.strip)
+                ]
+              }
+            ]
+          }
+        when /^☑\s+(.+)$/  # Checked checkbox
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+
+          content << {
+            "type" => "taskList",
+            "content" => [
+              {
+                "type" => "taskItem",
+                "attrs" => { "state" => "DONE" },
+                "content" => [
+                  create_paragraph($1.strip)
+                ]
+              }
+            ]
+          }
+        when /^---$/  # Horizontal rule
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+
+          content << { "type" => "rule" }
+        when ""  # Empty line
+          # Flush current paragraph
+          if current_paragraph.any?
+            content << create_paragraph(current_paragraph.join(" "))
+            current_paragraph = []
+          end
+        else  # Regular text
+          current_paragraph << line
+        end
+      end
+
+      # Flush any remaining paragraph
+      if current_paragraph.any?
+        content << create_paragraph(current_paragraph.join(" "))
+      end
+
+      {
+        "type" => "doc",
+        "version" => 1,
+        "content" => content
+      }
+    end
+
+    def create_paragraph(text)
+      {
+        "type" => "paragraph",
+        "content" => [
+          {
+            "type" => "text",
+            "text" => text
+          }
+        ]
+      }
+    end
+
     private
 
     def format_comment_as_adf(comment_data)
-      # If comment_data is a string (legacy), convert to simple ADF
+      # If comment_data is a string (from template), convert to simple ADF
       if comment_data.is_a?(String)
-        return {
-          "type" => "doc",
-          "version" => 1,
-          "content" => [
-            {
-              "type" => "paragraph",
-              "content" => [
-                {
-                  "type" => "text",
-                  "text" => comment_data
-                }
-              ]
-            }
-          ]
-        }
+        return convert_markdown_to_adf(comment_data)
       end
 
       # If comment_data is structured (new format), build proper ADF
