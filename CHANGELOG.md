@@ -1,5 +1,37 @@
 # N2B Changelog
 
+## 0.7.2 (2025-01-27) - Enhanced Stability & User Experience
+
+### 🔧 Critical Bug Fixes
+- **Fixed n2b-diff hanging issue**: Implemented robust timeout mechanism for VCS commands
+- **Eliminated Ruby warnings**: Resolved method redefinition warnings in test suite
+- **Enhanced error handling**: Better timeout management and process termination
+- **Improved Jira client**: Fixed TypeError in template data preparation for string inputs
+
+### ⚡ Performance & Reliability Improvements
+- **Timeout mechanism**: VCS commands now have configurable timeouts (10s for resolution, 5s for status)
+- **Process management**: Clean process termination using `Open3.popen3` with proper signal handling
+- **Error recovery**: Graceful fallback with helpful manual command suggestions
+- **Test stability**: Eliminated thread exceptions and IOError warnings
+
+### 🧪 Test Suite Enhancements
+- **Clean test output**: Removed all Ruby method redefinition warnings
+- **Shared test helpers**: Consolidated `MockHTTPResponse` class to prevent conflicts
+- **Timeout testing**: Added comprehensive tests for timeout functionality
+- **Mocha integration**: Added mocha gem dependency for proper test stubbing
+
+### 📚 Documentation Updates
+- **Prominent diff analysis**: AI-powered diff analysis now featured prominently in README
+- **Beta feature notice**: Clear beta labeling with feedback request
+- **Enhanced positioning**: Diff analysis moved to top of Quick Start section
+- **Feedback channels**: Multiple paths for user feedback (issues, discussions, stars)
+
+### 🎯 User Experience
+- **No more hanging**: Tool completes reliably without getting stuck
+- **Clear error messages**: Specific timeout and error information
+- **Manual fallback**: Helpful commands when auto-resolution fails
+- **Professional output**: Clean, warning-free execution
+
 ## 0.7.1 (2025-01-06) - Comprehensive Test Suite & Updated Gemspec
 
 ### 🧪 Comprehensive Test Coverage

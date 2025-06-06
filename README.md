@@ -2,7 +2,7 @@
 
 [![Gem Version](https://badge.fury.io/rb/n2b.svg)](https://badge.fury.io/rb/n2b)
 
-**Transform your development workflow with intelligent code analysis and seamless Jira integration.** N2B is an AI-powered development tool that revolutionizes code review, requirements compliance, and project management through automated analysis and smart ticket integration.
+**Transform your development workflow with intelligent code analysis and seamless Jira integration.** N2B is an AI-powered development tool that revolutionizes code review, requirements compliance, and project management through automated diff analysis, smart merge conflict resolution, and intelligent ticket integration.
 
 ## 🚀 **Key Features**
 
@@ -29,6 +29,42 @@
 - **VCS Integration**: Full Git and Mercurial support with branch comparison
 - **AI Merge Conflict Resolution**: Interactive merge conflict resolver with intelligent suggestions
 - **Errbit Integration**: Analyze errors and generate actionable reports
+
+## 🔍 **AI-Powered Diff Analysis** ⚡ *Beta Feature*
+
+**Get instant, intelligent code review for every change you make.** Our AI-powered diff analysis provides comprehensive insights into your code changes, helping you catch issues early and maintain high code quality.
+
+### ✨ **What Makes It Special**
+
+- **🧠 Context-Aware Analysis**: Understands your codebase patterns and architectural decisions
+- **🎯 Requirements Compliance**: Automatically checks if changes meet specified requirements
+- **🔍 Deep Code Review**: Identifies potential bugs, security issues, and performance problems
+- **💡 Smart Suggestions**: Provides actionable improvement recommendations with file/line references
+- **📊 Test Coverage**: Evaluates test completeness and suggests missing test scenarios
+- **🚀 Lightning Fast**: Get comprehensive analysis in seconds, not hours
+
+### 🚀 **Quick Start**
+
+```bash
+# Analyze your current changes
+n2b --diff
+
+# Compare against main branch with requirements checking
+n2b --diff --branch main --requirements requirements.md
+
+# Full workflow with Jira integration
+n2b --diff --jira PROJ-123 --jira-update
+```
+
+### 💬 **We Want Your Feedback!**
+
+This is a **beta feature** and we're actively improving it based on real-world usage. Your feedback is invaluable! Please share your experience:
+
+- 🐛 **Found a bug?** [Report it here](https://github.com/stefan-kp/n2b/issues)
+- 💡 **Have suggestions?** [Share your ideas](https://github.com/stefan-kp/n2b/discussions)
+- ⭐ **Love it?** [Star the repo](https://github.com/stefan-kp/n2b) and spread the word!
+
+---
 
 ## 🎯 **Jira Integration - Get Started in 2 Minutes**
 
@@ -82,14 +118,15 @@ n2b --diff --jira PROJ-123 --requirements specs.md
 
 ## 🆕 **What's New in v0.7.1**
 
+- **🔍 Enhanced AI Diff Analysis**: Comprehensive code review with context-aware insights (Beta)
 - **☐ Interactive Jira Checklists**: Native checkboxes for team collaboration and progress tracking
 - **🎯 Full Template Engine**: Variables, loops, conditionals for maximum customization
-- **� Smart Error Classification**: Automatic severity detection (Critical/Important/Low)
+- **🚨 Smart Error Classification**: Automatic severity detection (Critical/Important/Low)
 - **📁 Editor Integration**: Open conflicted files in your preferred editor with change detection
 - **🛡️ JSON Auto-Repair**: Automatically fixes malformed LLM responses
-- **� VCS Auto-Resolution**: Automatically marks resolved conflicts in Git/Mercurial
+- **✅ VCS Auto-Resolution**: Automatically marks resolved conflicts in Git/Mercurial
 - **🎨 Collapsible Sections**: Organized Jira comments with expand/collapse functionality
-- **🧪 Comprehensive Tests**: 36 tests ensuring bulletproof reliability
+- **🧪 Comprehensive Tests**: 103+ tests ensuring bulletproof reliability
 - **⚡ Enhanced Context**: Full file content sent to AI for better merge decisions
 - **🔄 Robust Error Handling**: Multiple recovery options when AI responses fail
 
@@ -184,6 +221,19 @@ hg merge
 
 ## Quick Start
 
+### 🔍 **AI-Powered Code Review** (⚡ Beta - Try It Now!)
+
+```bash
+# Get instant AI analysis of your changes
+n2b --diff
+
+# Compare against main branch with requirements checking
+n2b --diff --branch main --requirements specs.md
+
+# Full workflow with Jira integration
+n2b --diff --jira PROJ-123 --jira-update
+```
+
 ### 🎯 **For Jira Users** (Most Popular)
 
 ```bash
@@ -192,16 +242,6 @@ n2b --advanced-config
 
 # Analyze code changes against ticket
 n2b --diff --jira PROJ-123 --jira-update
-```
-
-### 🔍 **For Code Review**
-
-```bash
-# AI-powered diff analysis
-n2b --diff
-
-# Compare against main branch with requirements
-n2b --diff --branch main --requirements specs.md
 ```
 
 ### 💻 **For Command Generation**
