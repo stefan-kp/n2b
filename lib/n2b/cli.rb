@@ -316,32 +316,9 @@ module N2B
       end
     end
 
-    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "", requirements_content = nil)
-      default_system_prompt = <<-SYSTEM_PROMPT.strip
-You are a senior software developer reviewing a code diff.
-Your task is to provide a constructive and detailed analysis of the changes.
-Focus on identifying potential bugs, suggesting improvements in code quality, style, performance, and security.
-Also, provide a concise summary of the changes.
-
-IMPORTANT: When referring to specific issues or improvements, always include:
-- The exact file path (e.g., "lib/n2b/cli.rb")
-- The specific line numbers or line ranges (e.g., "line 42" or "lines 15-20")
-- The exact code snippet you're referring to when possible
-
-This helps users quickly locate and understand the issues you identify.
-
-SPECIAL FOCUS ON TEST COVERAGE:
-Pay special attention to whether the developer has provided adequate test coverage for the changes:
-- Look for new test files or modifications to existing test files
-- Check if new functionality has corresponding tests
-- Evaluate if edge cases and error conditions are tested
-- Assess if the tests are meaningful and comprehensive
-- Note any missing test coverage that should be added
-
-NOTE: In addition to the diff, you will also receive the current code context around the changed areas.
-This provides better understanding of the surrounding code and helps with more accurate analysis.
-The user may provide additional instructions or specific requirements below.
-SYSTEM_PROMPT
+    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "", requirements_content = nil, config = {})
+      default_system_prompt_path = resolve_template_path('diff_system_prompt', config)
+      default_system_prompt = File.read(default_system_prompt_path).strip
 
       user_instructions_section = ""
       unless user_prompt_addition.to_s.strip.empty?
@@ -382,35 +359,8 @@ REQUIREMENTS_BLOCK
         end
       end
 
-      json_instruction = <<-JSON_INSTRUCTION.strip
-CRITICAL: Return ONLY a valid JSON object.
-Do not include any explanatory text before or after the JSON.
-Each error and improvement should include specific file paths and line numbers.
-
-The JSON object must contain the following keys:
-- "summary": (string) Brief overall description of the changes.
-- "ticket_implementation_summary": (string) A concise summary of what was implemented or achieved in relation to the ticket's goals, based *only* on the provided diff. This is for developer status updates and Jira comments.
-- "errors": (list of strings) Potential bugs or issues found.
-- "improvements": (list of strings) Suggestions for code quality, style, performance, or security.
-- "test_coverage": (string) Assessment of test coverage for the changes.
-- "requirements_evaluation": (string, include only if requirements were provided in the prompt) Evaluation of how the changes meet the provided requirements.
-
-Example format:
-{
-  "summary": "Refactored the user authentication module and added password complexity checks.",
-  "ticket_implementation_summary": "Implemented the core logic for user password updates and strengthened security by adding complexity validation as per the ticket's primary goal. Some UI elements are pending.",
-  "errors": [
-    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil.",
-    "src/main.js lines 15-20: Missing error handling for async operation."
-  ],
-  "improvements": [
-    "lib/example.rb line 30: Consider using a constant for the magic number 42.",
-    "src/utils.py lines 5-10: This method could be simplified using list comprehension."
-  ],
-  "test_coverage": "Good: New functionality in lib/example.rb has corresponding tests in test/example_test.rb. Missing: No tests for error handling edge cases in the new validation method.",
-  "requirements_evaluation": "✅ IMPLEMENTED: User authentication feature is fully implemented in auth.rb. ⚠️ PARTIALLY IMPLEMENTED: Error handling is present but lacks specific error codes. ❌ NOT IMPLEMENTED: Email notifications are not addressed in this diff."
-}
-JSON_INSTRUCTION
+      json_instruction_path = resolve_template_path('diff_json_instruction', config)
+      json_instruction = File.read(json_instruction_path).strip
 
       full_prompt = [
         default_system_prompt,
@@ -426,7 +376,7 @@ JSON_INSTRUCTION
     end
 
     def analyze_diff(diff_output, config, user_prompt_addition = "", requirements_content = nil)
-      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition, requirements_content)
+      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition, requirements_content, config)
       analysis_json_str = call_llm_for_diff_analysis(prompt, config)
 
       begin
@@ -783,6 +733,13 @@ JSON_INSTRUCTION
         end
       end
       system("history -r") # Attempt to reload history in current session
+    end
+
+    def resolve_template_path(template_key, config)
+      user_path = config.dig('templates', template_key) if config.is_a?(Hash)
+      return user_path if user_path && File.exist?(user_path)
+
+      File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
     end
     
 

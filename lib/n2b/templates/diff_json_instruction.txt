@@ -1,0 +1,27 @@
+CRITICAL: Return ONLY a valid JSON object.
+Do not include any explanatory text before or after the JSON.
+Each error and improvement should include specific file paths and line numbers.
+
+The JSON object must contain the following keys:
+- "summary": (string) Brief overall description of the changes.
+- "ticket_implementation_summary": (string) A concise summary of what was implemented or achieved in relation to the ticket's goals, based *only* on the provided diff. This is for developer status updates and Jira comments.
+- "errors": (list of strings) Potential bugs or issues found.
+- "improvements": (list of strings) Suggestions for code quality, style, performance, or security.
+- "test_coverage": (string) Assessment of test coverage for the changes.
+- "requirements_evaluation": (string, include only if requirements were provided in the prompt) Evaluation of how the changes meet the provided requirements.
+
+Example format:
+{
+  "summary": "Refactored the user authentication module and added password complexity checks.",
+  "ticket_implementation_summary": "Implemented the core logic for user password updates and strengthened security by adding complexity validation as per the ticket's primary goal. Some UI elements are pending.",
+  "errors": [
+    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil.",
+    "src/main.js lines 15-20: Missing error handling for async operation."
+  ],
+  "improvements": [
+    "lib/example.rb line 30: Consider using a constant for the magic number 42.",
+    "src/utils.py lines 5-10: This method could be simplified using list comprehension."
+  ],
+  "test_coverage": "Good: New functionality in lib/example.rb has corresponding tests in test/example_test.rb. Missing: No tests for error handling edge cases in the new validation method.",
+  "requirements_evaluation": "✅ IMPLEMENTED: User authentication feature is fully implemented in auth.rb. ⚠️ PARTIALLY IMPLEMENTED: Error handling is present but lacks specific error codes. ❌ NOT IMPLEMENTED: Email notifications are not addressed in this diff."
+}
