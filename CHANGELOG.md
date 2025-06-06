@@ -6,7 +6,10 @@
 - Updated tests to reflect correct Claude API behavior
 
 ## 0.5.2 (2025-06-05) - JSON Mode Support
-- Request JSON responses from Claude, Gemini, and OpenAI when appropriate
+- Added JSON mode support for OpenAI (response_format: json_object)
+- Added JSON mode support for Gemini (responseMimeType: application/json)
+- Enhanced JSON parsing with fallback handling for all providers
+- Note: Claude relies on prompt instructions for JSON formatting (no native JSON mode)
 
 ## 0.5.1 (2025-06-05) - Bug Fixes
 - Fixed typographical error in gemspec description ("q quick helper" → "a quick helper")
