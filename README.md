@@ -95,8 +95,91 @@ n2b --diff --jira PROJ-123 --requirements specs.md
 
 ## Installation
 
+### **Basic Installation**
+
 ```bash
 gem install n2b
+```
+
+### **Global Installation with rbenv**
+
+For users with rbenv (Ruby version manager), install globally to make n2b available across all Ruby versions:
+
+```bash
+# Option 1: Install in system Ruby (Recommended)
+rbenv global system
+gem install n2b
+rbenv rehash
+
+# Option 2: Install in a dedicated Ruby version
+rbenv install 3.3.0
+rbenv global 3.3.0
+gem install n2b
+rbenv rehash
+
+# Verify installation works across Ruby versions
+rbenv shell 3.1.0 && n2b --version
+rbenv shell 3.2.0 && n2b --version
+```
+
+### **Fix rbenv Shim Issues**
+
+If `n2b-diff` command is not found after installation:
+
+```bash
+# Remove corrupted shim and regenerate
+rm ~/.rbenv/shims/.rbenv-shim
+rm -rf ~/.rbenv/shims/*
+rbenv rehash
+
+# Verify both commands are available
+which n2b
+which n2b-diff
+```
+
+### **Configure as Default Merge Tool**
+
+#### **Git Integration**
+
+Add to your `~/.gitconfig`:
+
+```ini
+[merge]
+    tool = n2b-diff
+
+[mergetool "n2b-diff"]
+    cmd = n2b-diff "$MERGED"
+    trustExitCode = true
+    keepBackup = false
+```
+
+Usage:
+```bash
+git merge feature-branch
+# CONFLICT (content): Merge conflict in file.rb
+git mergetool  # Uses n2b-diff automatically
+```
+
+#### **Mercurial (hg) Integration**
+
+Add to your `~/.hgrc`:
+
+```ini
+[ui]
+merge = n2b-diff
+
+[merge-tools]
+n2b-diff.executable = n2b-diff
+n2b-diff.args = $output
+n2b-diff.premerge = keep
+n2b-diff.priority = 100
+```
+
+Usage:
+```bash
+hg merge
+# conflict in file.rb
+# n2b-diff launches automatically
 ```
 
 ## Quick Start
@@ -683,6 +766,76 @@ Template variables available:
 - **Refactoring**: Handle conflicts during large refactoring efforts
 - **Team Collaboration**: Standardize merge conflict resolution approaches
 - **Learning Tool**: Understand best practices for conflict resolution
+
+### **Daily Workflow Integration**
+
+#### **Git Workflow**
+```bash
+# During merge conflicts
+git merge feature-branch
+# CONFLICT (content): Merge conflict in file.rb
+
+# Use configured merge tool
+git mergetool
+
+# Or call directly
+n2b-diff file.rb
+
+# Continue merge
+git add file.rb
+git commit -m "Resolve merge conflicts"
+```
+
+#### **Mercurial Workflow**
+```bash
+# During hg merge conflicts
+hg merge
+# conflict in file.rb
+
+# Resolve with n2b-diff (auto-launches if configured)
+n2b-diff file.rb
+
+# Mark as resolved and commit
+hg resolve --mark file.rb
+hg commit -m "Resolve merge conflicts"
+```
+
+#### **Rebase Conflicts**
+```bash
+# Git rebase conflicts
+git rebase -i main
+# CONFLICT: Merge conflict in user_service.rb
+
+n2b-diff user_service.rb
+git add user_service.rb
+git rebase --continue
+```
+
+#### **Batch Conflict Resolution**
+```bash
+# Find and resolve all conflicts
+find . -name "*.rb" -exec grep -l "<<<<<<< HEAD" {} \; | while read file; do
+    echo "Resolving conflicts in $file"
+    n2b-diff "$file"
+done
+```
+
+#### **Shell Aliases for Convenience**
+Add to your `.zshrc` or `.bashrc`:
+```bash
+# Quick aliases for n2b tools
+alias resolve-conflicts='n2b-diff'
+alias test-jira='n2b-test-jira'
+alias ai-diff='n2b --diff'
+
+# Function to resolve all conflict files
+resolve-all-conflicts() {
+    find . -name "*.rb" -exec grep -l "<<<<<<< HEAD" {} \; | while read file; do
+        echo "Resolving conflicts in $file"
+        n2b-diff "$file"
+    done
+}
+```
 
 n2r in ruby or rails console
 n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
