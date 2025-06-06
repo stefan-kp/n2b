@@ -414,7 +414,7 @@ module N2B
 
     def prepare_template_data(comment_data)
       # Extract and classify errors by severity
-      errors = comment_data[:issues] || []
+      errors = comment_data[:issues] || comment_data['issues'] || []
       critical_errors = []
       important_errors = []
       low_errors = []
@@ -440,7 +440,7 @@ module N2B
       end
 
       # Process improvements
-      improvements = (comment_data[:improvements] || []).map do |improvement|
+      improvements = (comment_data[:improvements] || comment_data['improvements'] || []).map do |improvement|
         {
           'file_reference' => extract_file_reference(improvement),
           'description' => clean_error_description(improvement)
@@ -448,22 +448,22 @@ module N2B
       end
 
       # Process missing tests
-      missing_tests = extract_missing_tests(comment_data[:test_coverage] || "")
+      missing_tests = extract_missing_tests(comment_data[:test_coverage] || comment_data['test_coverage'] || "")
 
       # Process requirements
-      requirements = extract_requirements_status(comment_data[:requirements_evaluation] || "")
+      requirements = extract_requirements_status(comment_data[:requirements_evaluation] || comment_data['requirements_evaluation'] || "")
 
       # Get git/hg info
       git_info = extract_git_info
 
       {
-        'implementation_summary' => comment_data[:implementation_summary] || "Code analysis completed",
+        'implementation_summary' => comment_data[:implementation_summary] || comment_data['implementation_summary'] || "Code analysis completed",
         'critical_errors' => critical_errors,
         'important_errors' => important_errors,
         'improvements' => improvements,
         'missing_tests' => missing_tests,
         'requirements' => requirements,
-        'test_coverage_summary' => comment_data[:test_coverage] || "No specific test coverage analysis available",
+        'test_coverage_summary' => comment_data[:test_coverage] || comment_data['test_coverage'] || "No specific test coverage analysis available",
         'timestamp' => Time.now.strftime("%Y-%m-%d %H:%M UTC"),
         'branch_name' => git_info[:branch],
         'files_changed' => git_info[:files_changed],
@@ -533,24 +533,35 @@ module N2B
     def extract_requirements_status(requirements_text)
       requirements = []
 
-      # Parse requirements with status indicators
-      requirements_text.scan(/(✅|⚠️|❌|🔍)?\s*(IMPLEMENTED|PARTIALLY IMPLEMENTED|NOT IMPLEMENTED|UNCLEAR)?:?\s*(.+?)(?=\n|$)/i) do |status_emoji, status_text, description|
+      # Split by lines and process each line
+      requirements_text.split("\n").each do |line|
+        line = line.strip
+        next if line.empty?
+
+        # Parse requirements with status indicators - order matters for regex matching
+        if match = line.match(/(✅|⚠️|❌|🔍)?\s*(PARTIALLY\s+IMPLEMENTED|NOT\s+IMPLEMENTED|IMPLEMENTED|UNCLEAR)?:?\s*(.+)/i)
+          status_emoji, status_text, description = match.captures
         status = case
-                when status_emoji == '✅' || status_text&.include?('IMPLEMENTED') && !status_text&.include?('NOT')
-                  'IMPLEMENTED'
-                when status_emoji == '⚠️' || status_text&.include?('PARTIALLY')
+                when status_text&.include?('PARTIALLY')
                   'PARTIALLY_IMPLEMENTED'
-                when status_emoji == '❌' || status_text&.include?('NOT IMPLEMENTED')
+                when status_text&.include?('NOT')
+                  'NOT_IMPLEMENTED'
+                when status_emoji == '✅' || (status_text&.include?('IMPLEMENTED') && !status_text&.include?('NOT') && !status_text&.include?('PARTIALLY'))
+                  'IMPLEMENTED'
+                when status_emoji == '⚠️'
+                  'PARTIALLY_IMPLEMENTED'
+                when status_emoji == '❌'
                   'NOT_IMPLEMENTED'
                 else
                   'UNCLEAR'
                 end
 
-        requirements << {
-          'status' => status,
-          'description' => description.strip,
-          'status_icon' => status_emoji || (status == 'IMPLEMENTED' ? '✅' : status == 'PARTIALLY_IMPLEMENTED' ? '⚠️' : status == 'NOT_IMPLEMENTED' ? '❌' : '🔍')
-        }
+          requirements << {
+            'status' => status,
+            'description' => description.strip,
+            'status_icon' => status_emoji || (status == 'IMPLEMENTED' ? '✅' : status == 'PARTIALLY_IMPLEMENTED' ? '⚠️' : status == 'NOT_IMPLEMENTED' ? '❌' : '🔍')
+          }
+        end
       end
 
       requirements

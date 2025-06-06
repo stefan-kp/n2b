@@ -1,5 +1,26 @@
 # N2B Changelog
 
+## 0.7.1 (2025-01-06) - Comprehensive Test Suite & Updated Gemspec
+
+### 🧪 Comprehensive Test Coverage
+- **Template Engine Tests**: 18 test cases covering variables, loops, conditionals, and edge cases
+- **Jira Integration Tests**: 17 test cases for error classification, file parsing, and template generation
+- **Real-world scenarios**: Complex template structures, multiline content, and nested conditionals
+- **Error handling**: Invalid data, missing variables, malformed templates
+- **Cross-platform compatibility**: Symbol/string key handling for robust data processing
+
+### 📝 Updated Gemspec & Documentation
+- **Modern description**: Reflects current AI-powered development toolkit capabilities
+- **Feature highlights**: Merge conflict resolution, Jira integration, multi-LLM support
+- **Professional presentation**: Clear value proposition for developers and teams
+- **Metadata improvements**: Enhanced discoverability and security settings
+
+### 🔧 Bug Fixes & Improvements
+- **Requirements parsing**: Fixed regex patterns for "PARTIALLY IMPLEMENTED" status detection
+- **Data handling**: Robust symbol/string key compatibility in template data
+- **Error classification**: Improved severity detection and file reference extraction
+- **Template validation**: Better handling of missing data and edge cases
+
 ## 0.7.0 (2025-01-06) - Jira Template System & Interactive Checklists
 
 ### 🎯 Full Template Engine
