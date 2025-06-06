@@ -80,18 +80,18 @@ n2b --diff --branch main --requirements requirements.md
 n2b --diff --jira PROJ-123 --requirements specs.md
 ```
 
-## 🆕 **What's New in v0.5.4**
+## 🆕 **What's New in v0.7.1**
 
-- **🔧 NEW: n2b-diff Command**: AI-powered merge conflict resolution tool
-- **🎨 Interactive Workflow**: Accept/Skip/Comment/Abort for each conflict with colorized display
-- **🤖 Smart Suggestions**: AI analyzes both sides and suggests optimal merges
-- **📝 Custom Templates**: Configurable merge prompts for different workflows
-- **🎯 Full Jira Integration**: Real API integration with ticket fetching and automated updates
-- **📝 Structured Comments**: Beautifully formatted Jira comments with collapsible sections
-- **🔍 Smart Requirements Extraction**: AI identifies requirements from tickets and comments
-- **🧪 Connection Testing**: Built-in `n2b-test-jira` utility for troubleshooting
-- **📋 Permission Validation**: Verifies all required Jira API permissions
-- **⚡ Enhanced Analysis**: Improved code review with better context and insights
+- **☐ Interactive Jira Checklists**: Native checkboxes for team collaboration and progress tracking
+- **🎯 Full Template Engine**: Variables, loops, conditionals for maximum customization
+- **� Smart Error Classification**: Automatic severity detection (Critical/Important/Low)
+- **📁 Editor Integration**: Open conflicted files in your preferred editor with change detection
+- **🛡️ JSON Auto-Repair**: Automatically fixes malformed LLM responses
+- **� VCS Auto-Resolution**: Automatically marks resolved conflicts in Git/Mercurial
+- **🎨 Collapsible Sections**: Organized Jira comments with expand/collapse functionality
+- **🧪 Comprehensive Tests**: 36 tests ensuring bulletproof reliability
+- **⚡ Enhanced Context**: Full file content sent to AI for better merge decisions
+- **🔄 Robust Error Handling**: Multiple recovery options when AI responses fail
 
 ## Installation
 
