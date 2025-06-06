@@ -617,23 +617,27 @@ REQUIREMENTS_BLOCK
               EOF
     
            
-      response_json_str = llm.make_request(content)
+      response = llm.make_request(content)
 
-      append_to_llm_history_file("#{prompt}\n#{response_json_str}") # Storing the raw JSON string
-      # The original call_llm was expected to return a hash after JSON.parse,
-      # but it was actually returning the string. Let's assume it should return a parsed Hash.
-      # However, the calling method `process_natural_language_command` accesses it like `bash_commands['commands']`
-      # which implies it expects a Hash. Let's ensure call_llm returns a Hash.
-      # This internal JSON parsing is for the *content* of a successful LLM response.
-      # The LlmApiError for network/auth issues should be caught before this.
+      # Handle both Hash (from JSON mode providers) and String responses
+      if response.is_a?(Hash)
+        # Already parsed by the LLM provider
+        parsed_response = response
+        response_str = response.to_json # For history logging
+      else
+        # String response that needs parsing
+        response_str = response
         begin
-          parsed_response = JSON.parse(response_json_str)
-          parsed_response
+          parsed_response = JSON.parse(response_str)
         rescue JSON::ParserError => e
           puts "Error parsing LLM response JSON for command generation: #{e.message}"
           # This is a fallback for when the LLM response *content* is not valid JSON.
-          { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+          parsed_response = { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
         end
+      end
+
+      append_to_llm_history_file("#{prompt}\n#{response_str}") # Storing the response for history
+      parsed_response
       rescue N2B::LlmApiError => e
         puts "Error communicating with the LLM: #{e.message}"
 
@@ -788,6 +792,11 @@ REQUIREMENTS_BLOCK
 
         opts.on('-h', '--help', 'Print this help') do
           puts opts
+          exit
+        end
+
+        opts.on('-v', '--version', 'Show version') do
+          puts "n2b version #{N2B::VERSION}"
           exit
         end
 

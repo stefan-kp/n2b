@@ -1,5 +1,18 @@
 # N2B Changelog
 
+## 0.5.4 (2025-06-05) - AI-Powered Merge Conflict Resolver + Critical Fixes
+- **NEW: n2b-diff command** - AI-powered merge conflict resolution tool
+- Interactive merge conflict resolver with LLM suggestions
+- Colorized conflict display with context lines
+- Accept/Skip/Comment/Abort workflow for each conflict
+- Merge logging with timestamps and decision tracking
+- Support for Git and Mercurial conflict markers
+- Fixed TypeError: no implicit conversion of Hash into String
+- CLI now properly handles both Hash and String responses from LLM providers
+- JSON mode providers return parsed Hash, non-JSON mode returns String
+- Improved response handling with proper type checking
+- Added --version/-v flag to display current version
+
 ## 0.5.3 (2025-06-05) - Critical Bug Fix
 - Fixed Claude API error: Removed unsupported response_format parameter
 - Claude (Anthropic) doesn't support JSON mode like OpenAI does
