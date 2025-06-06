@@ -751,6 +751,7 @@ templates:
 ```
 
 Template variables available:
+- `{full_file_content}` - Complete file content for full context understanding
 - `{context_before}` - Code before the conflict
 - `{context_after}` - Code after the conflict
 - `{base_label}` - Base branch label (e.g., "HEAD")

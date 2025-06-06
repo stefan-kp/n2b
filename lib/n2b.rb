@@ -14,6 +14,7 @@ require 'n2b/base'
 require 'n2b/cli'
 require 'n2b/merge_conflict_parser'
 require 'n2b/merge_cli'
+require 'n2b/template_engine'
 
 require 'n2b/irb'
 

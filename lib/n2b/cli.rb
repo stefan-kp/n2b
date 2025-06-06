@@ -557,7 +557,8 @@ REQUIREMENTS_BLOCK
                 raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
               end
 
-        response_json_str = llm.analyze_code_diff(prompt) # Call the new dedicated method
+        puts "🔍 AI is analyzing your code diff..."
+        response_json_str = analyze_diff_with_spinner(llm, prompt)
         response_json_str
       rescue N2B::LlmApiError => e # This catches errors from analyze_code_diff
         puts "Error communicating with the LLM: #{e.message}"
@@ -617,7 +618,8 @@ REQUIREMENTS_BLOCK
               EOF
     
            
-      response = llm.make_request(content)
+      puts "🤖 AI is generating commands..."
+      response = make_request_with_spinner(llm, content)
 
       # Handle both Hash (from JSON mode providers) and String responses
       if response.is_a?(Hash)
@@ -630,9 +632,18 @@ REQUIREMENTS_BLOCK
         begin
           parsed_response = JSON.parse(response_str)
         rescue JSON::ParserError => e
-          puts "Error parsing LLM response JSON for command generation: #{e.message}"
-          # This is a fallback for when the LLM response *content* is not valid JSON.
-          parsed_response = { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+          puts "⚠️  Invalid JSON detected, attempting automatic repair..."
+          repaired_response = attempt_json_repair_for_commands(response_str, llm)
+
+          if repaired_response
+            puts "✅ JSON repair successful!"
+            parsed_response = repaired_response
+          else
+            puts "❌ JSON repair failed"
+            puts "Error parsing LLM response JSON for command generation: #{e.message}"
+            # This is a fallback for when the LLM response *content* is not valid JSON.
+            parsed_response = { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+          end
         end
       end
 
@@ -745,7 +756,95 @@ REQUIREMENTS_BLOCK
 
       File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
     end
-    
+
+    def make_request_with_spinner(llm, content)
+      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+      spinner_thread = Thread.new do
+        i = 0
+        while true
+          print "\r⠿ #{spinner_chars[i % spinner_chars.length]} Processing..."
+          $stdout.flush
+          sleep(0.1)
+          i += 1
+        end
+      end
+
+      begin
+        result = llm.make_request(content)
+        spinner_thread.kill
+        print "\r#{' ' * 25}\r"  # Clear the spinner line
+        puts "✅ Commands generated!"
+        result
+      rescue => e
+        spinner_thread.kill
+        print "\r#{' ' * 25}\r"  # Clear the spinner line
+        raise e
+      end
+    end
+
+    def analyze_diff_with_spinner(llm, prompt)
+      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+      spinner_thread = Thread.new do
+        i = 0
+        while true
+          print "\r🔍 #{spinner_chars[i % spinner_chars.length]} Analyzing diff..."
+          $stdout.flush
+          sleep(0.1)
+          i += 1
+        end
+      end
+
+      begin
+        result = llm.analyze_code_diff(prompt)
+        spinner_thread.kill
+        print "\r#{' ' * 30}\r"  # Clear the spinner line
+        puts "✅ Diff analysis complete!"
+        result
+      rescue => e
+        spinner_thread.kill
+        print "\r#{' ' * 30}\r"  # Clear the spinner line
+        raise e
+      end
+    end
+
+    def attempt_json_repair_for_commands(malformed_response, llm)
+      repair_prompt = <<~PROMPT
+        The following response was supposed to be valid JSON with keys "commands" (array) and "explanation" (string), but it has formatting issues. Please fix it and return ONLY the corrected JSON:
+
+        Original response:
+        #{malformed_response}
+
+        Requirements:
+        - Must be valid JSON
+        - Must have "commands" key with array of command strings
+        - Must have "explanation" key with explanation text
+        - Return ONLY the JSON, no other text
+
+        Fixed JSON:
+      PROMPT
+
+      begin
+        puts "🔧 Asking AI to fix the JSON..."
+        repaired_json_str = llm.make_request(repair_prompt)
+
+        # Handle both Hash and String responses
+        if repaired_json_str.is_a?(Hash)
+          repaired_response = repaired_json_str
+        else
+          repaired_response = JSON.parse(repaired_json_str)
+        end
+
+        # Validate the repaired response structure
+        if repaired_response.is_a?(Hash) && repaired_response.key?('commands') && repaired_response.key?('explanation')
+          return repaired_response
+        else
+          return nil
+        end
+      rescue JSON::ParserError, StandardError
+        return nil
+      end
+    end
+
 
     def parse_options
       options = {

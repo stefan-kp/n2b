@@ -1,5 +1,9 @@
 You are a merge assistant. Combine the following conflict into a single version and explain your reasoning briefly.
 
+FULL FILE CONTENT FOR CONTEXT:
+{full_file_content}
+
+CONFLICT TO RESOLVE:
 Context before:
 {context_before}
 
