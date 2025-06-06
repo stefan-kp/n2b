@@ -1,6 +1,7 @@
 require 'net/http'
 require 'uri'
 require 'json'
+require_relative 'template_engine'
 
 module N2B
   class GitHubClient
@@ -27,15 +28,193 @@ module N2B
       end
     end
 
-    def update_issue(issue_input, comment)
+    def update_issue(issue_input, comment_data)
       repo, number = parse_issue_input(issue_input)
-      body = { 'body' => comment }
+      body_text = comment_data.is_a?(String) ? comment_data : generate_templated_comment(comment_data)
+      body = { 'body' => body_text }
       make_api_request('POST', "/repos/#{repo}/issues/#{number}/comments", body)
       puts "✅ Successfully added comment to GitHub issue #{repo}##{number}"
       true
     rescue GitHubApiError => e
       puts "❌ Failed to update GitHub issue #{repo}##{number}: #{e.message}"
       false
+    end
+
+    def generate_templated_comment(comment_data)
+      template_data = prepare_template_data(comment_data)
+      config = get_config(reconfigure: false, advanced_flow: false)
+      template_path = resolve_template_path('github_comment', config)
+      template_content = File.read(template_path)
+      engine = N2B::TemplateEngine.new(template_content, template_data)
+      engine.render
+    end
+
+    def prepare_template_data(comment_data)
+      errors = comment_data[:issues] || comment_data['issues'] || []
+      critical_errors = []
+      important_errors = []
+
+      errors.each do |error|
+        severity = classify_error_severity(error)
+        file_ref = extract_file_reference(error)
+        item = {
+          'file_reference' => file_ref,
+          'description' => clean_error_description(error)
+        }
+        case severity
+        when 'CRITICAL'
+          critical_errors << item
+        else
+          important_errors << item
+        end
+      end
+
+      improvements = (comment_data[:improvements] || comment_data['improvements'] || []).map do |imp|
+        {
+          'file_reference' => extract_file_reference(imp),
+          'description' => clean_error_description(imp)
+        }
+      end
+
+      missing_tests = extract_missing_tests(comment_data[:test_coverage] || comment_data['test_coverage'] || '')
+      requirements = extract_requirements_status(comment_data[:requirements_evaluation] || comment_data['requirements_evaluation'] || '')
+
+      git_info = extract_git_info
+
+      {
+        'implementation_summary' => comment_data[:implementation_summary] || comment_data['implementation_summary'] || 'Code analysis completed',
+        'critical_errors' => critical_errors,
+        'important_errors' => important_errors,
+        'improvements' => improvements,
+        'missing_tests' => missing_tests,
+        'requirements' => requirements,
+        'timestamp' => Time.now.strftime('%Y-%m-%d %H:%M UTC'),
+        'branch_name' => git_info[:branch],
+        'files_changed' => git_info[:files_changed],
+        'lines_added' => git_info[:lines_added],
+        'lines_removed' => git_info[:lines_removed],
+        'critical_errors_empty' => critical_errors.empty?,
+        'important_errors_empty' => important_errors.empty?,
+        'improvements_empty' => improvements.empty?,
+        'missing_tests_empty' => missing_tests.empty?
+      }
+    end
+
+    def classify_error_severity(error_text)
+      text = error_text.downcase
+      case text
+      when /security|sql injection|xss|csrf|vulnerability|exploit|attack/
+        'CRITICAL'
+      when /performance|n\+1|timeout|memory leak|slow query|bottleneck/
+        'IMPORTANT'
+      when /error|exception|bug|fail|crash|break/
+        'IMPORTANT'
+      when /style|convention|naming|format|indent|space/
+        'LOW'
+      else
+        'IMPORTANT'
+      end
+    end
+
+    def extract_file_reference(text)
+      if match = text.match(/(\S+\.(?:rb|js|py|java|cpp|c|h|ts|jsx|tsx|php|go|rs|swift|kt))(?:\s+(?:line|lines?)\s+(\d+(?:-\d+)?)|:(\d+(?:-\d+)?)|\s*\(line\s+(\d+)\))?/i)
+        file = match[1]
+        line = match[2] || match[3] || match[4]
+        line ? "#{file}:#{line}" : file
+      else
+        'General'
+      end
+    end
+
+    def clean_error_description(text)
+      text.gsub(/\S+\.(?:rb|js|py|java|cpp|c|h|ts|jsx|tsx|php|go|rs|swift|kt)(?:\s+(?:line|lines?)\s+\d+(?:-\d+)?|:\d+(?:-\d+)?|\s*\(line\s+\d+\))?:?\s*/i, '').strip
+    end
+
+    def extract_missing_tests(test_coverage_text)
+      missing_tests = []
+      test_coverage_text.scan(/(?:missing|need|add|require).*?test.*?(?:\.|$)/i) do |match|
+        missing_tests << { 'description' => match.strip }
+      end
+      if missing_tests.empty? && test_coverage_text.include?('%')
+        if coverage_match = test_coverage_text.match(/(\d+)%/)
+          coverage = coverage_match[1].to_i
+          if coverage < 80
+            missing_tests << { 'description' => "Increase test coverage from #{coverage}% to target 80%+" }
+          end
+        end
+      end
+      missing_tests
+    end
+
+    def extract_requirements_status(requirements_text)
+      requirements = []
+      requirements_text.split("\n").each do |line|
+        line = line.strip
+        next if line.empty?
+        if match = line.match(/(✅|⚠️|❌|🔍)?\s*(PARTIALLY\s+IMPLEMENTED|NOT\s+IMPLEMENTED|IMPLEMENTED|UNCLEAR)?:?\s*(.+)/i)
+          status_emoji, status_text, description = match.captures
+          status = case
+                   when status_text&.include?('PARTIALLY')
+                     'PARTIALLY_IMPLEMENTED'
+                   when status_text&.include?('NOT')
+                     'NOT_IMPLEMENTED'
+                   when status_emoji == '✅' || (status_text&.include?('IMPLEMENTED') && !status_text&.include?('NOT') && !status_text&.include?('PARTIALLY'))
+                     'IMPLEMENTED'
+                   when status_emoji == '⚠️'
+                     'PARTIALLY_IMPLEMENTED'
+                   when status_emoji == '❌'
+                     'NOT_IMPLEMENTED'
+                   else
+                     'UNCLEAR'
+                   end
+          requirements << {
+            'status' => status,
+            'description' => description.strip
+          }
+        end
+      end
+      requirements
+    end
+
+    def extract_git_info
+      begin
+        if File.exist?('.git')
+          branch = `git branch --show-current 2>/dev/null`.strip
+          branch = 'unknown' if branch.empty?
+          diff_stats = `git diff --stat HEAD~1 2>/dev/null`.strip
+          files_changed = diff_stats.scan(/(\d+) files? changed/).flatten.first || '0'
+          lines_added = diff_stats.scan(/(\d+) insertions?/).flatten.first || '0'
+          lines_removed = diff_stats.scan(/(\d+) deletions?/).flatten.first || '0'
+        elsif File.exist?('.hg')
+          branch = `hg branch 2>/dev/null`.strip
+          branch = 'default' if branch.empty?
+          diff_stats = `hg diff --stat 2>/dev/null`.strip
+          files_changed = diff_stats.lines.count.to_s
+          lines_added = '0'
+          lines_removed = '0'
+        else
+          branch = 'unknown'
+          files_changed = '0'
+          lines_added = '0'
+          lines_removed = '0'
+        end
+      rescue
+        branch = 'unknown'
+        files_changed = '0'
+        lines_added = '0'
+        lines_removed = '0'
+      end
+      { branch: branch, files_changed: files_changed, lines_added: lines_added, lines_removed: lines_removed }
+    end
+
+    def resolve_template_path(template_key, config)
+      user_path = config.dig('templates', template_key) if config.is_a?(Hash)
+      return user_path if user_path && File.exist?(user_path)
+      File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
+    end
+
+    def get_config(reconfigure: false, advanced_flow: false)
+      {}
     end
 
     def test_connection

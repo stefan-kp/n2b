@@ -391,9 +391,16 @@ module N2B
 
 
     def test_update_ticket_placeholder
-      # This now makes real API calls and will fail with 404 for non-existent tickets
-      # We test it runs without error and returns false for failed API calls
-      refute @jira_client.update_ticket('PROJ-123', 'Test comment')
+      # This now uses the templated comment system. We pass minimal structured
+      # data and expect a failed update (returns false) for a non-existent ticket.
+      comment_data = {
+        implementation_summary: 'Test comment',
+        issues: [],
+        improvements: [],
+        test_coverage: '',
+        requirements_evaluation: ''
+      }
+      refute @jira_client.update_ticket('PROJ-123', comment_data)
       # Future: Mock Net::HTTP, verify URL, headers, body, and simulate responses.
     end
 

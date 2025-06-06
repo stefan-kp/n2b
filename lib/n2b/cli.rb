@@ -370,32 +370,9 @@ module N2B
       end
     end
 
-    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "", requirements_content = nil)
-      default_system_prompt = <<-SYSTEM_PROMPT.strip
-You are a senior software developer reviewing a code diff.
-Your task is to provide a constructive and detailed analysis of the changes.
-Focus on identifying potential bugs, suggesting improvements in code quality, style, performance, and security.
-Also, provide a concise summary of the changes.
-
-IMPORTANT: When referring to specific issues or improvements, always include:
-- The exact file path (e.g., "lib/n2b/cli.rb")
-- The specific line numbers or line ranges (e.g., "line 42" or "lines 15-20")
-- The exact code snippet you're referring to when possible
-
-This helps users quickly locate and understand the issues you identify.
-
-SPECIAL FOCUS ON TEST COVERAGE:
-Pay special attention to whether the developer has provided adequate test coverage for the changes:
-- Look for new test files or modifications to existing test files
-- Check if new functionality has corresponding tests
-- Evaluate if edge cases and error conditions are tested
-- Assess if the tests are meaningful and comprehensive
-- Note any missing test coverage that should be added
-
-NOTE: In addition to the diff, you will also receive the current code context around the changed areas.
-This provides better understanding of the surrounding code and helps with more accurate analysis.
-The user may provide additional instructions or specific requirements below.
-SYSTEM_PROMPT
+    def build_diff_analysis_prompt(diff_output, user_prompt_addition = "", requirements_content = nil, config = {})
+      default_system_prompt_path = resolve_template_path('diff_system_prompt', config)
+      default_system_prompt = File.read(default_system_prompt_path).strip
 
       user_instructions_section = ""
       unless user_prompt_addition.to_s.strip.empty?
@@ -436,35 +413,8 @@ REQUIREMENTS_BLOCK
         end
       end
 
-      json_instruction = <<-JSON_INSTRUCTION.strip
-CRITICAL: Return ONLY a valid JSON object.
-Do not include any explanatory text before or after the JSON.
-Each error and improvement should include specific file paths and line numbers.
-
-The JSON object must contain the following keys:
-- "summary": (string) Brief overall description of the changes.
-- "ticket_implementation_summary": (string) A concise summary of what was implemented or achieved in relation to the ticket's goals, based *only* on the provided diff. This is for developer status updates and Jira comments.
-- "errors": (list of strings) Potential bugs or issues found.
-- "improvements": (list of strings) Suggestions for code quality, style, performance, or security.
-- "test_coverage": (string) Assessment of test coverage for the changes.
-- "requirements_evaluation": (string, include only if requirements were provided in the prompt) Evaluation of how the changes meet the provided requirements.
-
-Example format:
-{
-  "summary": "Refactored the user authentication module and added password complexity checks.",
-  "ticket_implementation_summary": "Implemented the core logic for user password updates and strengthened security by adding complexity validation as per the ticket's primary goal. Some UI elements are pending.",
-  "errors": [
-    "lib/example.rb line 42: Potential null pointer exception when accessing user.name without checking if user is nil.",
-    "src/main.js lines 15-20: Missing error handling for async operation."
-  ],
-  "improvements": [
-    "lib/example.rb line 30: Consider using a constant for the magic number 42.",
-    "src/utils.py lines 5-10: This method could be simplified using list comprehension."
-  ],
-  "test_coverage": "Good: New functionality in lib/example.rb has corresponding tests in test/example_test.rb. Missing: No tests for error handling edge cases in the new validation method.",
-  "requirements_evaluation": "✅ IMPLEMENTED: User authentication feature is fully implemented in auth.rb. ⚠️ PARTIALLY IMPLEMENTED: Error handling is present but lacks specific error codes. ❌ NOT IMPLEMENTED: Email notifications are not addressed in this diff."
-}
-JSON_INSTRUCTION
+      json_instruction_path = resolve_template_path('diff_json_instruction', config)
+      json_instruction = File.read(json_instruction_path).strip
 
       full_prompt = [
         default_system_prompt,
@@ -480,7 +430,7 @@ JSON_INSTRUCTION
     end
 
     def analyze_diff(diff_output, config, user_prompt_addition = "", requirements_content = nil)
-      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition, requirements_content)
+      prompt = build_diff_analysis_prompt(diff_output, user_prompt_addition, requirements_content, config)
       analysis_json_str = call_llm_for_diff_analysis(prompt, config)
 
       begin
@@ -557,28 +507,14 @@ JSON_INSTRUCTION
     def format_analysis_for_github(analysis_result)
       return "No analysis result available." if analysis_result.nil? || analysis_result.empty?
 
-      lines = []
-      lines << "### Implementation Summary"
-      lines << (analysis_result['ticket_implementation_summary'] || 'N/A')
-      lines << "\n### Technical Summary"
-      lines << (analysis_result['summary'] || 'N/A')
-
-      errors = Array(analysis_result['errors']).map(&:to_s).reject(&:empty?)
-      unless errors.empty?
-        lines << "\n### Issues"
-        errors.each { |e| lines << "- #{e}" }
-      end
-
-      improvements = Array(analysis_result['improvements']).map(&:to_s).reject(&:empty?)
-      unless improvements.empty?
-        lines << "\n### Improvements"
-        improvements.each { |i| lines << "- #{i}" }
-      end
-
-      lines << "\n### Test Coverage"
-      lines << (analysis_result['test_coverage'] || 'N/A')
-
-      lines.join("\n")
+      {
+        implementation_summary: analysis_result['ticket_implementation_summary']&.strip,
+        technical_summary: analysis_result['summary']&.strip,
+        issues: format_issues_for_adf(analysis_result['errors']),
+        improvements: format_improvements_for_adf(analysis_result['improvements']),
+        test_coverage: analysis_result['test_coverage']&.strip,
+        requirements_evaluation: analysis_result['requirements_evaluation']&.strip
+      }
     end
 
     def extract_json_from_response(response)
@@ -688,7 +624,8 @@ JSON_INSTRUCTION
                 raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
               end
 
-        response_json_str = llm.analyze_code_diff(prompt) # Call the new dedicated method
+        puts "🔍 AI is analyzing your code diff..."
+        response_json_str = analyze_diff_with_spinner(llm, prompt)
         response_json_str
       rescue N2B::LlmApiError => e # This catches errors from analyze_code_diff
         puts "Error communicating with the LLM: #{e.message}"
@@ -748,23 +685,37 @@ JSON_INSTRUCTION
               EOF
     
            
-      response_json_str = llm.make_request(content)
+      puts "🤖 AI is generating commands..."
+      response = make_request_with_spinner(llm, content)
 
-      append_to_llm_history_file("#{prompt}\n#{response_json_str}") # Storing the raw JSON string
-      # The original call_llm was expected to return a hash after JSON.parse,
-      # but it was actually returning the string. Let's assume it should return a parsed Hash.
-      # However, the calling method `process_natural_language_command` accesses it like `bash_commands['commands']`
-      # which implies it expects a Hash. Let's ensure call_llm returns a Hash.
-      # This internal JSON parsing is for the *content* of a successful LLM response.
-      # The LlmApiError for network/auth issues should be caught before this.
+      # Handle both Hash (from JSON mode providers) and String responses
+      if response.is_a?(Hash)
+        # Already parsed by the LLM provider
+        parsed_response = response
+        response_str = response.to_json # For history logging
+      else
+        # String response that needs parsing
+        response_str = response
         begin
-          parsed_response = JSON.parse(response_json_str)
-          parsed_response
+          parsed_response = JSON.parse(response_str)
         rescue JSON::ParserError => e
-          puts "Error parsing LLM response JSON for command generation: #{e.message}"
-          # This is a fallback for when the LLM response *content* is not valid JSON.
-          { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+          puts "⚠️  Invalid JSON detected, attempting automatic repair..."
+          repaired_response = attempt_json_repair_for_commands(response_str, llm)
+
+          if repaired_response
+            puts "✅ JSON repair successful!"
+            parsed_response = repaired_response
+          else
+            puts "❌ JSON repair failed"
+            puts "Error parsing LLM response JSON for command generation: #{e.message}"
+            # This is a fallback for when the LLM response *content* is not valid JSON.
+            parsed_response = { "commands" => ["echo 'Error: LLM returned invalid JSON content.'"], "explanation" => "The response from the language model was not valid JSON." }
+          end
         end
+      end
+
+      append_to_llm_history_file("#{prompt}\n#{response_str}") # Storing the response for history
+      parsed_response
       rescue N2B::LlmApiError => e
         puts "Error communicating with the LLM: #{e.message}"
 
@@ -865,7 +816,102 @@ JSON_INSTRUCTION
       end
       system("history -r") # Attempt to reload history in current session
     end
-    
+
+    def resolve_template_path(template_key, config)
+      user_path = config.dig('templates', template_key) if config.is_a?(Hash)
+      return user_path if user_path && File.exist?(user_path)
+
+      File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
+    end
+
+    def make_request_with_spinner(llm, content)
+      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+      spinner_thread = Thread.new do
+        i = 0
+        while true
+          print "\r⠿ #{spinner_chars[i % spinner_chars.length]} Processing..."
+          $stdout.flush
+          sleep(0.1)
+          i += 1
+        end
+      end
+
+      begin
+        result = llm.make_request(content)
+        spinner_thread.kill
+        print "\r#{' ' * 25}\r"  # Clear the spinner line
+        puts "✅ Commands generated!"
+        result
+      rescue => e
+        spinner_thread.kill
+        print "\r#{' ' * 25}\r"  # Clear the spinner line
+        raise e
+      end
+    end
+
+    def analyze_diff_with_spinner(llm, prompt)
+      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+      spinner_thread = Thread.new do
+        i = 0
+        while true
+          print "\r🔍 #{spinner_chars[i % spinner_chars.length]} Analyzing diff..."
+          $stdout.flush
+          sleep(0.1)
+          i += 1
+        end
+      end
+
+      begin
+        result = llm.analyze_code_diff(prompt)
+        spinner_thread.kill
+        print "\r#{' ' * 30}\r"  # Clear the spinner line
+        puts "✅ Diff analysis complete!"
+        result
+      rescue => e
+        spinner_thread.kill
+        print "\r#{' ' * 30}\r"  # Clear the spinner line
+        raise e
+      end
+    end
+
+    def attempt_json_repair_for_commands(malformed_response, llm)
+      repair_prompt = <<~PROMPT
+        The following response was supposed to be valid JSON with keys "commands" (array) and "explanation" (string), but it has formatting issues. Please fix it and return ONLY the corrected JSON:
+
+        Original response:
+        #{malformed_response}
+
+        Requirements:
+        - Must be valid JSON
+        - Must have "commands" key with array of command strings
+        - Must have "explanation" key with explanation text
+        - Return ONLY the JSON, no other text
+
+        Fixed JSON:
+      PROMPT
+
+      begin
+        puts "🔧 Asking AI to fix the JSON..."
+        repaired_json_str = llm.make_request(repair_prompt)
+
+        # Handle both Hash and String responses
+        if repaired_json_str.is_a?(Hash)
+          repaired_response = repaired_json_str
+        else
+          repaired_response = JSON.parse(repaired_json_str)
+        end
+
+        # Validate the repaired response structure
+        if repaired_response.is_a?(Hash) && repaired_response.key?('commands') && repaired_response.key?('explanation')
+          return repaired_response
+        else
+          return nil
+        end
+      rescue JSON::ParserError, StandardError
+        return nil
+      end
+    end
+
 
     def parse_options
       options = {
@@ -912,6 +958,11 @@ JSON_INSTRUCTION
 
         opts.on('-h', '--help', 'Print this help') do
           puts opts
+          exit
+        end
+
+        opts.on('-v', '--version', 'Show version') do
+          puts "n2b version #{N2B::VERSION}"
           exit
         end
 

@@ -1,0 +1,61 @@
+### N2B Code Analysis Report
+
+**Implementation Summary**
+{implementation_summary}
+
+---
+
+{#if critical_errors_empty}
+_No critical issues found._
+{#else}
+**Critical Issues**
+{#each critical_errors}
+- {file_reference} - {description}
+{/each}
+{/if}
+
+{#if important_errors_empty}
+_No important issues found._
+{#else}
+**Important Issues**
+{#each important_errors}
+- {file_reference} - {description}
+{/each}
+{/if}
+
+{#if improvements_empty}
+_No suggested improvements._
+{#else}
+**Improvements**
+{#each improvements}
+- {file_reference} - {description}
+{/each}
+{/if}
+
+{#if missing_tests_empty}
+_No missing tests identified._
+{#else}
+**Missing Tests**
+{#each missing_tests}
+- {description}
+{/each}
+{/if}
+
+**Requirements Status**
+{#each requirements}
+{#if status == 'IMPLEMENTED'}
+- ✅ {description}
+{/if}
+{#if status == 'PARTIALLY_IMPLEMENTED'}
+- ⚠️ {description}
+{/if}
+{#if status == 'NOT_IMPLEMENTED'}
+- ❌ {description}
+{/if}
+{#if status == 'UNCLEAR'}
+- 🔍 {description}
+{/if}
+{/each}
+
+*Generated on {timestamp} | Branch: {branch_name} | Files changed: {files_changed} | Lines: +{lines_added} -{lines_removed}*
+

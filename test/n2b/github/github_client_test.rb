@@ -53,11 +53,31 @@ module N2B
       end
     end
 
-    def test_parse_issue_url
+  def test_parse_issue_url
       make_public(@client, :parse_issue_input) do
         repo, num = @client.send(:parse_issue_input, 'https://github.com/foo/bar/issues/42')
         assert_equal 'foo/bar', repo
         assert_equal '42', num
+      end
+    end
+
+    def test_generate_templated_comment_basic
+      comment_data = {
+        implementation_summary: 'Added feature',
+        issues: ['app.rb:1 - bug'],
+        improvements: ['lib/foo.rb - use foo'],
+        test_coverage: 'Coverage 70%',
+        requirements_evaluation: '✅ IMPLEMENTED: done'
+      }
+
+      @client.stub(:extract_git_info, { branch: 'main', files_changed: '1', lines_added: '10', lines_removed: '2' }) do
+        result = @client.generate_templated_comment(comment_data)
+        assert_includes result, 'Added feature'
+        assert_includes result, 'app.rb:1'
+        assert_includes result, 'bug'
+        assert_includes result, 'use foo'
+        assert_includes result, 'Increase test coverage'
+        assert_includes result, '✅'
       end
     end
   end

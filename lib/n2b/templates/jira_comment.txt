@@ -1,0 +1,67 @@
+*N2B Code Analysis Report*
+=========================
+
+*Implementation Summary:*
+{implementation_summary}
+
+---
+
+*Automated Analysis Findings:*
+
+{expand:🚨 Critical Issues (Must Fix Before Merge)}
+{#each critical_errors}
+☐ {file_reference} - {description}
+{/each}
+{#if critical_errors_empty}
+✅ No critical issues found
+{/if}
+{expand}
+
+{expand:⚠️ Important Issues (Should Address)}
+{#each important_errors}
+☐ {file_reference} - {description}
+{/each}
+{#if important_errors_empty}
+✅ No important issues found
+{/if}
+{expand}
+
+{expand:💡 Suggested Improvements (Nice to Have)}
+{#each improvements}
+☐ {file_reference} - {description}
+{/each}
+{#if improvements_empty}
+ℹ️ No specific improvements suggested
+{/if}
+{expand}
+
+{expand:🧪 Test Coverage Assessment}
+*Overall Assessment:* {test_coverage_summary}
+
+*Missing Test Coverage:*
+{#each missing_tests}
+☐ {description}
+{/each}
+{#if missing_tests_empty}
+✅ Test coverage appears adequate
+{/if}
+{expand}
+
+*📋 Requirements Evaluation:*
+{#each requirements}
+{#if status == 'IMPLEMENTED'}
+☑ ✅ *IMPLEMENTED:* {description}
+{/if}
+{#if status == 'PARTIALLY_IMPLEMENTED'}
+☐ ⚠️ *PARTIALLY IMPLEMENTED:* {description}
+{/if}
+{#if status == 'NOT_IMPLEMENTED'}
+☐ ❌ *NOT IMPLEMENTED:* {description}
+{/if}
+{#if status == 'UNCLEAR'}
+☐ 🔍 *UNCLEAR:* {description}
+{/if}
+{/each}
+
+---
+*Analysis completed on {timestamp} | Branch: {branch_name} | Files changed: {files_changed} | Lines: +{lines_added} -{lines_removed}*
