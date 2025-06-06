@@ -27,6 +27,7 @@
 - **Natural Language Commands**: Convert descriptions to executable bash commands
 - **Ruby Code Generation**: Generate Ruby code from natural language instructions
 - **VCS Integration**: Full Git and Mercurial support with branch comparison
+- **AI Merge Conflict Resolution**: Interactive merge conflict resolver with intelligent suggestions
 - **Errbit Integration**: Analyze errors and generate actionable reports
 
 ## 🎯 **Jira Integration - Get Started in 2 Minutes**
@@ -79,8 +80,12 @@ n2b --diff --branch main --requirements requirements.md
 n2b --diff --jira PROJ-123 --requirements specs.md
 ```
 
-## 🆕 **What's New in v0.5.0**
+## 🆕 **What's New in v0.5.4**
 
+- **🔧 NEW: n2b-diff Command**: AI-powered merge conflict resolution tool
+- **🎨 Interactive Workflow**: Accept/Skip/Comment/Abort for each conflict with colorized display
+- **🤖 Smart Suggestions**: AI analyzes both sides and suggests optimal merges
+- **📝 Custom Templates**: Configurable merge prompts for different workflows
 - **🎯 Full Jira Integration**: Real API integration with ticket fetching and automated updates
 - **📝 Structured Comments**: Beautifully formatted Jira comments with collapsible sections
 - **🔍 Smart Requirements Extraction**: AI identifies requirements from tickets and comments
@@ -237,15 +242,21 @@ export N2B_HISTORY_FILE=/path/to/your/history
 
 ### Custom Prompt Templates
 
-N2B's diff analysis prompt is based on text templates. To override them, specify paths in your configuration:
+N2B uses text templates for AI prompts. To override them, specify paths in your configuration:
 
 ```yaml
 templates:
   diff_system_prompt: /path/to/my_system_prompt.txt
   diff_json_instruction: /path/to/my_json_instruction.txt
+  merge_conflict_prompt: /path/to/my_merge_prompt.txt
 ```
 
 When these paths are not provided, the built-in templates located in `lib/n2b/templates/` are used.
+
+**Available Templates:**
+- `diff_system_prompt.txt` - Main diff analysis prompt
+- `diff_json_instruction.txt` - JSON formatting instructions for diff analysis
+- `merge_conflict_prompt.txt` - Merge conflict resolution prompt
 
 ## Quick Example N2B
 
@@ -344,7 +355,12 @@ Options:
 - `--jira-no-update`: Skip Jira ticket update (analyze only)
 - `-c` or `--config`: Reconfigure the tool
 - `--advanced-config`: Advanced configuration including Jira setup
+- `-v` or `--version`: Show version information
 - `-h` or `--help`: Display help information
+
+**Additional Commands:**
+- `n2b-diff FILE`: AI-powered merge conflict resolution
+- `n2b-test-jira`: Test Jira API connection and permissions
 
 Examples:
 
@@ -555,6 +571,119 @@ This will verify:
 - Required permissions
 - Specific ticket access (if provided)
 
+## 🔧 **AI-Powered Merge Conflict Resolution (n2b-diff)**
+
+Resolve Git and Mercurial merge conflicts with intelligent AI assistance.
+
+### Quick Start
+
+```bash
+# Resolve conflicts in a file
+n2b-diff conflicted_file.rb
+
+# With more context lines
+n2b-diff conflicted_file.rb --context 20
+
+# Get help
+n2b-diff --help
+```
+
+### How It Works
+
+1. **🔍 Detects Conflicts**: Automatically finds `<<<<<<<`, `=======`, `>>>>>>>` markers
+2. **📋 Extracts Context**: Shows surrounding code for better understanding
+3. **🤖 AI Analysis**: LLM analyzes both sides and suggests optimal merge
+4. **🎨 Interactive Review**: Colorized display with Accept/Skip/Comment/Abort options
+5. **✅ Applies Changes**: Updates file with accepted merges
+
+### Interactive Workflow
+
+For each conflict, you can:
+- **[y] Accept** - Apply the AI suggestion
+- **[n] Skip** - Keep the conflict as-is
+- **[c] Comment** - Add context to improve AI suggestions
+- **[a] Abort** - Stop processing and keep file unchanged
+
+### Features
+
+#### **🎨 Colorized Display**
+- 🔴 **Red**: Base/HEAD content (`<<<<<<< HEAD`)
+- 🟢 **Green**: Incoming content (`>>>>>>> feature`)
+- 🟡 **Yellow**: Conflict markers (`=======`)
+- 🔵 **Blue**: AI suggestions
+- ⚪ **Gray**: Reasoning explanations
+
+#### **🤖 Smart AI Analysis**
+- **Context Awareness**: Understands surrounding code patterns
+- **Quality Decisions**: Chooses enhanced implementations over simple ones
+- **Consistency**: Maintains coding patterns and architectural decisions
+- **User Feedback**: Incorporates comments to improve suggestions
+
+#### **⚙️ Configurable Options**
+- **Context Lines**: `--context N` (default: 10)
+- **Merge Logging**: Optional JSON logs in `.n2b_merge_log/`
+- **Custom Templates**: Configurable merge prompts
+
+### Example Session
+
+```bash
+$ n2b-diff user_service.rb
+
+<<<<<<< HEAD
+def create_user(name, email)
+  # Basic validation
+  raise "Invalid" if name.empty?
+  User.create(name: name, email: email)
+end
+=======
+def create_user(name, email, age = nil)
+  # Enhanced validation
+  validate_name(name)
+  validate_email(email)
+  User.create(name: name.titleize, email: email.downcase, age: age)
+end
+>>>>>>> feature/enhanced-validation
+
+--- Suggestion ---
+def create_user(name, email, age = nil)
+  # Enhanced validation with fallback
+  validate_name(name) if respond_to?(:validate_name)
+  validate_email(email) if respond_to?(:validate_email)
+  User.create(name: name.titleize, email: email.downcase, age: age)
+end
+
+Reason: Combined enhanced validation from feature branch with safety checks
+for method existence, maintaining backward compatibility while adding new features.
+
+Accept [y], Skip [n], Comment [c], Abort [a]: y
+```
+
+### Custom Templates
+
+Customize merge prompts by adding to your config:
+
+```yaml
+templates:
+  merge_conflict_prompt: /path/to/my_merge_prompt.txt
+```
+
+Template variables available:
+- `{context_before}` - Code before the conflict
+- `{context_after}` - Code after the conflict
+- `{base_label}` - Base branch label (e.g., "HEAD")
+- `{base_content}` - Base branch content
+- `{incoming_label}` - Incoming branch label (e.g., "feature/auth")
+- `{incoming_content}` - Incoming branch content
+- `{user_comment}` - User-provided comment (if any)
+
+### Use Cases
+
+- **Feature Branch Merges**: Resolve conflicts when merging feature branches
+- **Code Reviews**: Get AI assistance for complex merge decisions
+- **Refactoring**: Handle conflicts during large refactoring efforts
+- **Team Collaboration**: Standardize merge conflict resolution approaches
+- **Learning Tool**: Understand best practices for conflict resolution
+
 n2r in ruby or rails console
 n2r "your question", files:['file1.rb', 'file2.rb'], exception: AnError
 only question is mandatory
@@ -615,6 +744,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 This project is licensed under the MIT License.
 
 ## Version History
+
+### 🔧 **v0.5.4 - AI-Powered Merge Conflict Resolver**
+- **NEW: n2b-diff command** - Interactive AI-powered merge conflict resolution
+- Colorized conflict display with Accept/Skip/Comment/Abort workflow
+- Smart AI suggestions with detailed reasoning and user feedback integration
+- Custom templates for merge prompts and configurable context lines
+- Merge logging and Git/Mercurial support
 
 ### 🚀 **v0.5.0 - Jira Integration & Enhanced Analysis**
 - Full Jira API integration with real ticket fetching and comment posting

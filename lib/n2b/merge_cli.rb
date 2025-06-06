@@ -123,23 +123,19 @@ module N2B
     end
 
     def build_merge_prompt(block, comment)
-      <<~PROMPT
-      You are a merge assistant. Combine the following conflict into a single version and explain your reasoning briefly.
-      Context before:
-      #{block.context_before}
+      config = get_config(reconfigure: false, advanced_flow: false)
+      template_path = resolve_template_path('merge_conflict_prompt', config)
+      template = File.read(template_path)
 
-      <<<<<<< #{block.base_label}
-      #{block.base_content}
-      =======
-      #{block.incoming_content}
-      >>>>>>> #{block.incoming_label}
+      user_comment_text = comment && !comment.empty? ? "User comment: #{comment}" : ""
 
-      Context after:
-      #{block.context_after}
-      #{"User comment: #{comment}" if comment && !comment.empty?}
-
-      Respond in JSON with keys "merged_code" and "reason".
-      PROMPT
+      template.gsub('{context_before}', block.context_before.to_s)
+              .gsub('{base_label}', block.base_label.to_s)
+              .gsub('{base_content}', block.base_content.to_s)
+              .gsub('{incoming_content}', block.incoming_content.to_s)
+              .gsub('{incoming_label}', block.incoming_label.to_s)
+              .gsub('{context_after}', block.context_after.to_s)
+              .gsub('{user_comment}', user_comment_text)
     end
 
     def call_llm_for_merge(prompt, config)
@@ -196,6 +192,13 @@ module N2B
       puts "#{COLOR_BLUE}--- Suggestion ---#{COLOR_RESET}"
       puts "#{COLOR_BLUE}#{sug['merged_code']}#{COLOR_RESET}"
       puts "#{COLOR_GRAY}Reason: #{sug['reason']}#{COLOR_RESET}"
+    end
+
+    def resolve_template_path(template_key, config)
+      user_path = config.dig('templates', template_key) if config.is_a?(Hash)
+      return user_path if user_path && File.exist?(user_path)
+
+      File.expand_path(File.join(__dir__, 'templates', "#{template_key}.txt"))
     end
   end
 end

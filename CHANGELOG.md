@@ -1,17 +1,28 @@
 # N2B Changelog
 
-## 0.5.4 (2025-06-05) - AI-Powered Merge Conflict Resolver + Critical Fixes
-- **NEW: n2b-diff command** - AI-powered merge conflict resolution tool
-- Interactive merge conflict resolver with LLM suggestions
-- Colorized conflict display with context lines
-- Accept/Skip/Comment/Abort workflow for each conflict
-- Merge logging with timestamps and decision tracking
-- Support for Git and Mercurial conflict markers
-- Fixed TypeError: no implicit conversion of Hash into String
-- CLI now properly handles both Hash and String responses from LLM providers
-- JSON mode providers return parsed Hash, non-JSON mode returns String
-- Improved response handling with proper type checking
-- Added --version/-v flag to display current version
+## 0.5.4 (2025-06-06) - AI-Powered Merge Conflict Resolver + Critical Fixes
+
+### 🔧 NEW FEATURE: n2b-diff Command
+- **AI-powered merge conflict resolution tool** with interactive workflow
+- **Colorized conflict display** with configurable context lines (--context N)
+- **Interactive options**: Accept/Skip/Comment/Abort for each conflict
+- **Smart AI suggestions** with detailed reasoning explanations
+- **Comment-driven improvements** - add context to get better suggestions
+- **Merge logging** with timestamps and decision tracking in `.n2b_merge_log/`
+- **Custom templates** - configurable merge prompts via `merge_conflict_prompt.txt`
+- **Git & Mercurial support** - works with both VCS conflict markers
+- **Template system** - extract merge prompts to customizable text files
+
+### 🐛 Critical Bug Fixes
+- **Fixed TypeError**: no implicit conversion of Hash into String in CLI
+- **Improved JSON handling**: properly handles both Hash and String responses from LLM providers
+- **Type safety**: JSON mode providers return parsed Hash, non-JSON mode returns String
+- **Enhanced error handling**: better response type checking and fallbacks
+
+### ✨ Enhancements
+- **Added --version/-v flag** to display current version information
+- **Template extraction**: merge prompts now use customizable template files
+- **Better documentation**: comprehensive README updates with examples and use cases
 
 ## 0.5.3 (2025-06-05) - Critical Bug Fix
 - Fixed Claude API error: Removed unsupported response_format parameter

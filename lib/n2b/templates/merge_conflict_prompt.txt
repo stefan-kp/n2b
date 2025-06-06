@@ -1,0 +1,16 @@
+You are a merge assistant. Combine the following conflict into a single version and explain your reasoning briefly.
+
+Context before:
+{context_before}
+
+<<<<<<< {base_label}
+{base_content}
+=======
+{incoming_content}
+>>>>>>> {incoming_label}
+
+Context after:
+{context_after}
+{user_comment}
+
+Respond in JSON with keys "merged_code" and "reason".
