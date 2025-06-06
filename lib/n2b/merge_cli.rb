@@ -431,21 +431,65 @@ module N2B
     def mark_file_as_resolved(file_path)
       # Detect VCS and mark file as resolved
       if File.exist?('.hg')
-        result = system("hg resolve --mark #{Shellwords.escape(file_path)} 2>/dev/null")
-        if result
+        result = execute_vcs_command_with_timeout("hg resolve --mark #{Shellwords.escape(file_path)}", 10)
+        if result[:success]
           puts "#{COLOR_GREEN}✅ Marked #{file_path} as resolved in Mercurial#{COLOR_RESET}"
         else
           puts "#{COLOR_YELLOW}⚠️  Could not mark #{file_path} as resolved in Mercurial#{COLOR_RESET}"
+          puts "#{COLOR_GRAY}Error: #{result[:error]}#{COLOR_RESET}" if result[:error]
+          puts "#{COLOR_GRAY}💡 You can manually mark it with: hg resolve --mark #{file_path}#{COLOR_RESET}"
         end
       elsif File.exist?('.git')
-        result = system("git add #{Shellwords.escape(file_path)} 2>/dev/null")
-        if result
+        result = execute_vcs_command_with_timeout("git add #{Shellwords.escape(file_path)}", 10)
+        if result[:success]
           puts "#{COLOR_GREEN}✅ Added #{file_path} to Git staging area#{COLOR_RESET}"
         else
           puts "#{COLOR_YELLOW}⚠️  Could not add #{file_path} to Git staging area#{COLOR_RESET}"
+          puts "#{COLOR_GRAY}Error: #{result[:error]}#{COLOR_RESET}" if result[:error]
+          puts "#{COLOR_GRAY}💡 You can manually add it with: git add #{file_path}#{COLOR_RESET}"
         end
       else
         puts "#{COLOR_BLUE}ℹ️  No VCS detected - file saved but not marked as resolved#{COLOR_RESET}"
+      end
+    end
+
+    def execute_vcs_command_with_timeout(command, timeout_seconds)
+      require 'open3'
+
+      begin
+        # Use Open3.popen3 with manual timeout handling to avoid thread issues
+        stdin, stdout, stderr, wait_thr = Open3.popen3(command)
+        stdin.close
+
+        # Wait for the process with timeout
+        if wait_thr.join(timeout_seconds)
+          # Process completed within timeout
+          stdout_content = stdout.read
+          stderr_content = stderr.read
+          status = wait_thr.value
+
+          stdout.close
+          stderr.close
+
+          if status.success?
+            { success: true, stdout: stdout_content, stderr: stderr_content }
+          else
+            { success: false, error: "Command failed: #{stderr_content.strip}", stdout: stdout_content, stderr: stderr_content }
+          end
+        else
+          # Process timed out, kill it
+          Process.kill('TERM', wait_thr.pid) rescue nil
+          sleep(0.1)
+          Process.kill('KILL', wait_thr.pid) rescue nil
+
+          stdout.close rescue nil
+          stderr.close rescue nil
+          wait_thr.join rescue nil
+
+          { success: false, error: "Command timed out after #{timeout_seconds} seconds" }
+        end
+      rescue => e
+        { success: false, error: "Unexpected error: #{e.message}" }
       end
     end
 
@@ -456,31 +500,42 @@ module N2B
       # Show unresolved conflicts if in a VCS repository
       if File.exist?('.hg')
         puts "#{COLOR_BLUE}📋 Unresolved conflicts in Mercurial:#{COLOR_RESET}"
-        unresolved = `hg resolve --list 2>/dev/null`.lines
-        unresolved_files = unresolved.select { |line| line.start_with?('U ') }
+        result = execute_vcs_command_with_timeout("hg resolve --list", 5)
 
-        if unresolved_files.any?
-          unresolved_files.each do |line|
-            file = line.strip.sub(/^U /, '')
-            puts "  #{COLOR_RED}❌ #{file}#{COLOR_RESET}"
+        if result[:success]
+          unresolved_files = result[:stdout].lines.select { |line| line.start_with?('U ') }
+
+          if unresolved_files.any?
+            unresolved_files.each do |line|
+              file = line.strip.sub(/^U /, '')
+              puts "  #{COLOR_RED}❌ #{file}#{COLOR_RESET}"
+            end
+            puts ""
+            puts "#{COLOR_YELLOW}💡 Use: n2b-diff <filename> to resolve conflicts#{COLOR_RESET}"
+          else
+            puts "  #{COLOR_GREEN}✅ No unresolved conflicts#{COLOR_RESET}"
           end
-          puts ""
-          puts "#{COLOR_YELLOW}💡 Use: n2b-diff <filename> to resolve conflicts#{COLOR_RESET}"
         else
-          puts "  #{COLOR_GREEN}✅ No unresolved conflicts#{COLOR_RESET}"
+          puts "  #{COLOR_YELLOW}⚠️  Could not check Mercurial status: #{result[:error]}#{COLOR_RESET}"
         end
       elsif File.exist?('.git')
         puts "#{COLOR_BLUE}📋 Unresolved conflicts in Git:#{COLOR_RESET}"
-        unresolved = `git diff --name-only --diff-filter=U 2>/dev/null`.lines
+        result = execute_vcs_command_with_timeout("git diff --name-only --diff-filter=U", 5)
 
-        if unresolved.any?
-          unresolved.each do |file|
-            puts "  #{COLOR_RED}❌ #{file.strip}#{COLOR_RESET}"
+        if result[:success]
+          unresolved_files = result[:stdout].lines
+
+          if unresolved_files.any?
+            unresolved_files.each do |file|
+              puts "  #{COLOR_RED}❌ #{file.strip}#{COLOR_RESET}"
+            end
+            puts ""
+            puts "#{COLOR_YELLOW}💡 Use: n2b-diff <filename> to resolve conflicts#{COLOR_RESET}"
+          else
+            puts "  #{COLOR_GREEN}✅ No unresolved conflicts#{COLOR_RESET}"
           end
-          puts ""
-          puts "#{COLOR_YELLOW}💡 Use: n2b-diff <filename> to resolve conflicts#{COLOR_RESET}"
         else
-          puts "  #{COLOR_GREEN}✅ No unresolved conflicts#{COLOR_RESET}"
+          puts "  #{COLOR_YELLOW}⚠️  Could not check Git status: #{result[:error]}#{COLOR_RESET}"
         end
       end
     end
@@ -585,10 +640,15 @@ module N2B
       begin
         case editor
         when 'open'
-          # macOS: open with default application
-          system("open #{Shellwords.escape(file_path)}")
+          # macOS: open with default application (non-blocking)
+          result = execute_vcs_command_with_timeout("open #{Shellwords.escape(file_path)}", 5)
+          unless result[:success]
+            puts "#{COLOR_YELLOW}⚠️  Could not open with 'open' command: #{result[:error]}#{COLOR_RESET}"
+            puts "#{COLOR_BLUE}💡 Please open #{file_path} manually in your editor#{COLOR_RESET}"
+          end
         else
-          # Other editors: open directly
+          # Other editors: open directly (blocking)
+          puts "#{COLOR_BLUE}🔧 Opening with #{editor}...#{COLOR_RESET}"
           system("#{editor} #{Shellwords.escape(file_path)}")
         end
       rescue => e

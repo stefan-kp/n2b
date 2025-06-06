@@ -413,6 +413,31 @@ module N2B
     end
 
     def prepare_template_data(comment_data)
+      # Handle both string and hash inputs
+      if comment_data.is_a?(String)
+        # For simple string comments, create a basic template data structure
+        git_info = extract_git_info
+        return {
+          'implementation_summary' => comment_data,
+          'critical_errors' => [],
+          'important_errors' => [],
+          'improvements' => [],
+          'missing_tests' => [],
+          'requirements' => [],
+          'test_coverage_summary' => "No specific test coverage analysis available",
+          'timestamp' => Time.now.strftime("%Y-%m-%d %H:%M UTC"),
+          'branch_name' => git_info[:branch],
+          'files_changed' => git_info[:files_changed],
+          'lines_added' => git_info[:lines_added],
+          'lines_removed' => git_info[:lines_removed],
+          'critical_errors_empty' => true,
+          'important_errors_empty' => true,
+          'improvements_empty' => true,
+          'missing_tests_empty' => true
+        }
+      end
+
+      # Handle hash input (structured analysis data)
       # Extract and classify errors by severity
       errors = comment_data[:issues] || comment_data['issues'] || []
       critical_errors = []
