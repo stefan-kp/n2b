@@ -452,6 +452,7 @@ module N2B
         puts "#{COLOR_BLUE}ℹ️  No VCS detected - file saved but not marked as resolved#{COLOR_RESET}"
       end
     end
+
     def execute_vcs_command_with_timeout(command, timeout_seconds)
       require 'open3'
 
@@ -491,6 +492,7 @@ module N2B
         { success: false, error: "Unexpected error: #{e.message}" }
       end
     end
+
     def show_usage_and_unresolved
       puts "Usage: n2b-diff FILE [--context N]"
       puts ""

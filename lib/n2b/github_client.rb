@@ -42,8 +42,7 @@ module N2B
 
     def generate_templated_comment(comment_data)
       template_data = prepare_template_data(comment_data)
-      config = get_config(reconfigure: false, advanced_flow: false)
-      template_path = resolve_template_path('github_comment', config)
+      template_path = resolve_template_path('github_comment', @config)
       template_content = File.read(template_path)
       engine = N2B::TemplateEngine.new(template_content, template_data)
       engine.render

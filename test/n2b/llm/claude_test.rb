@@ -1,6 +1,7 @@
 require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/claude'
 require_relative '../../../lib/n2b/errors'
+
 module N2M
   module Llm
     class ClaudeTest < Minitest::Test
