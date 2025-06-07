@@ -1,12 +1,12 @@
 require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/open_ai'
 require_relative '../../../lib/n2b/errors'
-module N2M
+module N2B
   module Llm
     class OpenAiTest < Minitest::Test
       def setup
         @config = { 'access_key' => 'test_key', 'model' => 'gpt-4o' }
-        @client = OpenAi.new(@config)
+        @client = N2B::Llm::OpenAi.new(@config)
       end
 
       def test_make_request_json_mode

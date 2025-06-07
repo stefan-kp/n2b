@@ -1,6 +1,6 @@
 require_relative '../model_config'
 
-module N2M
+module N2B
   module Llm
     class Claude
       API_URI = URI.parse('https://api.anthropic.com/v1/messages')

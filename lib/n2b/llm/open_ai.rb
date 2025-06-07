@@ -3,7 +3,7 @@ require 'json'
 require 'uri'
 require_relative '../model_config'
 
-module N2M
+module N2B
   module Llm
     class OpenAi
       API_URI = URI.parse('https://api.openai.com/v1/chat/completions')

@@ -247,19 +247,23 @@ module N2B
               errors << "Jira API key missing when domain is configured"
             end
           else
-            errors << "Jira domain missing"
+            errors << "Jira domain missing when issue_tracker is set to 'jira'"
           end
         else
-          errors << "Jira configuration missing"
+          errors << "Jira configuration missing when issue_tracker is set to 'jira'"
         end
       when 'github'
         if config['github'] && !config['github'].empty?
           gh = config['github']
-          errors << "GitHub repository missing" if gh['repo'].nil? || gh['repo'].empty?
-          errors << "GitHub access token missing" if gh['access_token'].nil? || gh['access_token'].empty?
+          errors << "GitHub repository missing when issue_tracker is set to 'github'" if gh['repo'].nil? || gh['repo'].empty?
+          errors << "GitHub access token missing when issue_tracker is set to 'github'" if gh['access_token'].nil? || gh['access_token'].empty?
         else
-          errors << "GitHub configuration missing"
+          errors << "GitHub configuration missing when issue_tracker is set to 'github'"
         end
+      when 'none'
+        # No validation needed for 'none' tracker
+      else
+        errors << "Invalid issue_tracker '#{tracker}' - must be 'jira', 'github', or 'none'"
       end
 
       errors

@@ -178,17 +178,32 @@ module N2B
     def extract_git_info
       begin
         if File.exist?('.git')
-          branch = `git branch --show-current 2>/dev/null`.strip
+          branch = execute_vcs_command_with_timeout('git branch --show-current', 5)
+          branch = branch[:success] ? branch[:stdout].strip : 'unknown'
           branch = 'unknown' if branch.empty?
-          diff_stats = `git diff --stat HEAD~1 2>/dev/null`.strip
-          files_changed = diff_stats.scan(/(\d+) files? changed/).flatten.first || '0'
-          lines_added = diff_stats.scan(/(\d+) insertions?/).flatten.first || '0'
-          lines_removed = diff_stats.scan(/(\d+) deletions?/).flatten.first || '0'
+
+          diff_result = execute_vcs_command_with_timeout('git diff --stat HEAD~1', 5)
+          if diff_result[:success]
+            diff_stats = diff_result[:stdout].strip
+            files_changed = diff_stats.scan(/(\d+) files? changed/).flatten.first || '0'
+            lines_added = diff_stats.scan(/(\d+) insertions?/).flatten.first || '0'
+            lines_removed = diff_stats.scan(/(\d+) deletions?/).flatten.first || '0'
+          else
+            files_changed = '0'
+            lines_added = '0'
+            lines_removed = '0'
+          end
         elsif File.exist?('.hg')
-          branch = `hg branch 2>/dev/null`.strip
+          branch_result = execute_vcs_command_with_timeout('hg branch', 5)
+          branch = branch_result[:success] ? branch_result[:stdout].strip : 'default'
           branch = 'default' if branch.empty?
-          diff_stats = `hg diff --stat 2>/dev/null`.strip
-          files_changed = diff_stats.lines.count.to_s
+
+          diff_result = execute_vcs_command_with_timeout('hg diff --stat', 5)
+          if diff_result[:success]
+            files_changed = diff_result[:stdout].lines.count.to_s
+          else
+            files_changed = '0'
+          end
           lines_added = '0'
           lines_removed = '0'
         else
@@ -197,13 +212,57 @@ module N2B
           lines_added = '0'
           lines_removed = '0'
         end
-      rescue
+      rescue => e
         branch = 'unknown'
         files_changed = '0'
         lines_added = '0'
         lines_removed = '0'
       end
       { branch: branch, files_changed: files_changed, lines_added: lines_added, lines_removed: lines_removed }
+    end
+
+    def execute_vcs_command_with_timeout(command, timeout_seconds)
+      require 'open3'
+
+      begin
+        # Use Open3.popen3 with manual timeout handling to avoid thread issues
+        stdin, stdout, stderr, wait_thr = Open3.popen3(command)
+        stdin.close
+
+        # Manual timeout implementation
+        start_time = Time.now
+        while wait_thr.alive?
+          if Time.now - start_time > timeout_seconds
+            # Kill the process
+            begin
+              Process.kill('TERM', wait_thr.pid)
+              sleep(0.5)
+              Process.kill('KILL', wait_thr.pid) if wait_thr.alive?
+            rescue Errno::ESRCH
+              # Process already dead
+            end
+            stdout.close
+            stderr.close
+            return { success: false, error: "Command timed out after #{timeout_seconds} seconds" }
+          end
+          sleep(0.1)
+        end
+
+        # Process completed within timeout
+        stdout_content = stdout.read
+        stderr_content = stderr.read
+        stdout.close
+        stderr.close
+
+        exit_status = wait_thr.value
+        if exit_status.success?
+          { success: true, stdout: stdout_content, stderr: stderr_content }
+        else
+          { success: false, error: stderr_content.empty? ? "Command failed with exit code #{exit_status.exitstatus}" : stderr_content }
+        end
+      rescue => e
+        { success: false, error: "Unexpected error: #{e.message}" }
+      end
     end
 
     def resolve_template_path(template_key, config)

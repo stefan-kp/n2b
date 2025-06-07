@@ -1,12 +1,12 @@
 require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/gemini'
 require_relative '../../../lib/n2b/errors'
-module N2M
+module N2B
   module Llm
     class GeminiTest < Minitest::Test
       def setup
         @config = { 'access_key' => 'test_key', 'model' => 'gemini-1.5' }
-        @client = Gemini.new(@config)
+        @client = N2B::Llm::Gemini.new(@config)
       end
 
       def test_make_request_sets_generation_config_and_parses_json
