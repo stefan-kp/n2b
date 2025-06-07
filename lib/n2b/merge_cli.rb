@@ -452,9 +452,6 @@ module N2B
         puts "#{COLOR_BLUE}ℹ️  No VCS detected - file saved but not marked as resolved#{COLOR_RESET}"
       end
     end
-
-<<<<<<< HEAD
-=======
     def execute_vcs_command_with_timeout(command, timeout_seconds)
       require 'open3'
 
