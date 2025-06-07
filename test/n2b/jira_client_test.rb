@@ -257,45 +257,8 @@ module N2B
       # fetch_ticket should return the full_description_output.
       # To test this, we need a dummy description in JiraClient that *doesn't* have known headers.
 
-      # Temporarily override extract_requirements_from_description to simulate no extraction
-      original_method = N2B::JiraClient.instance_method(:extract_requirements_from_description)
-
-      N2B::JiraClient.send(:define_method, :extract_requirements_from_description) do |desc|
-        desc # Simulate no specific sections found, return original
-      end
-
-      # This dummy description will be returned as is by the mocked extraction
-      _dummy_desc_content_for_fallback = "This is a simple description without special headers." # Unused but kept for documentation
-
-      # We need to ensure this dummy description is what fetch_ticket uses.
-      # This is tricky because the dummy description is hardcoded in fetch_ticket.
-      # A more robust test would involve mocking Net::HTTP to return this simple description.
-      # For now, we acknowledge this limitation. The test_fetch_ticket_api_call_success_and_extraction
-      # already tests the "happy path" of extraction from the existing complex dummy data.
-
-      # The current dummy data in JiraClient is complex and *will* have extracted requirements.
-      # So, to test the fallback, we need to ensure extract_requirements_from_description returns the *original description*
-      # which it does if no headers are found.
-      # The current dummy description in `fetch_ticket` is complex, so extraction will occur.
-      # This test case is more about the logic within `fetch_ticket` given a certain outcome from extraction.
-
-      # Let's assume the internal dummy description in fetch_ticket was simpler:
-      # And extract_requirements_from_description returned it as is.
-      # Then fetch_ticket should format it into the "full_description_output".
-
-      # This test is more conceptual with current JiraClient structure,
-      # as the dummy data is fixed. A better test would involve true HTTP mocking.
-      # For now, we assume if `extract_requirements_from_description` returns the original description,
-      # `fetch_ticket` correctly formats it. The existing `fetch_ticket` structure shows this.
-
-      # Re-evaluating: The fallback in fetch_ticket is:
-      # if extracted_requirements != dummy_data['fields']['description'] && !extracted_requirements.empty?
-      # So, if extracted_requirements IS EQUAL to dummy_data['fields']['description'], it means fallback.
-
-      # To force this, we can mock extract_requirements_from_description
-      # to return exactly its input.
-
-      mock_jira_client = N2B::JiraClient.new(@config_data) # Fresh instance for mocking
+      # Create a fresh instance for mocking to avoid class-level method redefinition warnings
+      mock_jira_client = N2B::JiraClient.new(@config_data)
 
       # This is the exact dummy description used in jira_client.rb
       # It's used to construct the expected full output when extraction does nothing.
@@ -380,13 +343,6 @@ module N2B
 
       actual_output = mock_jira_client.fetch_ticket(ticket_key_for_test)
       assert_equal expected_full_output, actual_output.strip
-    ensure
-       # Restore original method if changed
-       # This ensure block might not be strictly necessary with define_singleton_method,
-       # as it only affects the mock_jira_client instance.
-       # However, if we were globally changing N2B::JiraClient.instance_method, it would be crucial.
-       # For now, it's harmless.
-       N2B::JiraClient.send(:define_method, :extract_requirements_from_description, original_method) if original_method && defined?(original_method)
     end
 
 

@@ -10,7 +10,6 @@ class MergeCLITest < Minitest::Test
     FileUtils.mkdir_p(@tmp_dir)
     @file_path = File.join(@tmp_dir, 'conflict.txt')
     @config = { 'llm' => 'openai', 'merge_log_enabled' => false }
-    N2B::MergeCLI.any_instance.stubs(:get_config).returns(@config)
   end
 
   def teardown
@@ -72,5 +71,33 @@ class MergeCLITest < Minitest::Test
 
     result = File.read(@file_path)
     assert_equal original, result
+  end
+
+  def test_execute_vcs_command_with_timeout_success
+    cli = N2B::MergeCLI.new([])
+
+    result = cli.send(:execute_vcs_command_with_timeout, "echo 'test'", 5)
+
+    assert result[:success]
+    assert_equal "test\n", result[:stdout]
+  end
+
+  def test_execute_vcs_command_with_timeout_failure
+    cli = N2B::MergeCLI.new([])
+
+    result = cli.send(:execute_vcs_command_with_timeout, "false", 5)
+
+    refute result[:success]
+    assert_includes result[:error], "Command failed"
+  end
+
+  def test_execute_vcs_command_with_timeout_timeout
+    cli = N2B::MergeCLI.new([])
+
+    # Use a command that will definitely timeout
+    result = cli.send(:execute_vcs_command_with_timeout, "sleep 10", 1)
+
+    refute result[:success]
+    assert_includes result[:error], "timed out"
   end
 end

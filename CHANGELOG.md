@@ -1,9 +1,43 @@
 # N2B Changelog
 
-## 0.7.2 (2025-06-06) - GitHub Issue Support
-- Added configurable issue tracker selection (Jira or GitHub)
-- Implemented basic GitHub integration with fetch and comment update
-- New `n2b-test-github` script to verify GitHub connectivity
+## 0.7.2 (2025-01-27) - GitHub Integration & Enhanced Stability
+
+### 🔗 GitHub Integration
+- **Added configurable issue tracker selection**: Choose between Jira or GitHub
+- **Implemented GitHub integration**: Full fetch and comment update functionality
+- **GitHub template system**: Uses new template engine with `github_comment.txt`
+- **New `n2b-test-github` script**: Verify GitHub connectivity and permissions
+- **Comprehensive tests**: Full test suite for GitHub client functionality
+
+### 🔧 Critical Bug Fixes
+- **Fixed n2b-diff hanging issue**: Implemented robust timeout mechanism for VCS commands
+- **Eliminated Ruby warnings**: Resolved method redefinition warnings in test suite
+- **Enhanced error handling**: Better timeout management and process termination
+- **Improved Jira client**: Fixed TypeError in template data preparation for string inputs
+
+### ⚡ Performance & Reliability Improvements
+- **Timeout mechanism**: VCS commands now have configurable timeouts (10s for resolution, 5s for status)
+- **Process management**: Clean process termination using `Open3.popen3` with proper signal handling
+- **Error recovery**: Graceful fallback with helpful manual command suggestions
+- **Test stability**: Eliminated thread exceptions and IOError warnings
+
+### 🧪 Test Suite Enhancements
+- **Clean test output**: Removed all Ruby method redefinition warnings
+- **Shared test helpers**: Consolidated `MockHTTPResponse` class to prevent conflicts
+- **Timeout testing**: Added comprehensive tests for timeout functionality
+- **Mocha integration**: Added mocha gem dependency for proper test stubbing
+
+### 📚 Documentation Updates
+- **Prominent diff analysis**: AI-powered diff analysis now featured prominently in README
+- **Beta feature notice**: Clear beta labeling with feedback request
+- **Enhanced positioning**: Diff analysis moved to top of Quick Start section
+- **Feedback channels**: Multiple paths for user feedback (issues, discussions, stars)
+
+### 🎯 User Experience
+- **No more hanging**: Tool completes reliably without getting stuck
+- **Clear error messages**: Specific timeout and error information
+- **Manual fallback**: Helpful commands when auto-resolution fails
+- **Professional output**: Clean, warning-free execution
 
 ## 0.7.1 (2025-01-06) - Comprehensive Test Suite & Updated Gemspec
 

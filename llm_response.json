@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "diff --help"
+  ],
+  "explanation": "The 'diff' command is used to compare files line by line. Without specific files to compare, this shows the help/usage information for the diff command. To actually use diff, you would typically run 'diff file1 file2' to compare two files, or 'diff -r dir1 dir2' to compare directories recursively. Common useful options include '-u' for unified format, '-w' to ignore whitespace differences, and '-i' to ignore case differences."
+}

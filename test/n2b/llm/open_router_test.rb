@@ -1,23 +1,6 @@
-require 'minitest/autorun'
-require 'net/http'
-require 'json'
+require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/open_router' # Adjust path if necessary
 require_relative '../../../lib/n2b/errors' # For N2B::LlmApiError
-
-# Mock Net::HTTP and its response
-class MockHTTPResponse
-  attr_accessor :code, :body, :message
-
-  def initialize(code, body, message = 'OK')
-    @code = code
-    @body = body
-    @message = message
-  end
-
-  def ==(other)
-    other.is_a?(MockHTTPResponse) && other.code == @code && other.body == @body && other.message == @message
-  end
-end
 
 module N2M
   module Llm

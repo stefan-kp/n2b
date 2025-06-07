@@ -1,18 +1,6 @@
-require 'minitest/autorun'
-require 'net/http'
-require 'json'
+require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/open_ai'
 require_relative '../../../lib/n2b/errors'
-
-class MockHTTPResponse
-  attr_accessor :code, :body, :message
-  def initialize(code, body, message = 'OK')
-    @code = code
-    @body = body
-    @message = message
-  end
-end
-
 module N2M
   module Llm
     class OpenAiTest < Minitest::Test
