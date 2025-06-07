@@ -27,4 +27,27 @@ GoogleConfig.yml
 /coverage/
 
 # Ignore rvm files
-.rvmrc 
+.rvmrc
+
+# Ignore macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Ignore temporary LLM response files
+llm_response.json
+*.response.json
+
+# Ignore built gem files
+*.gem
+
+# Ignore generated documentation
+/doc/
+/rdoc/
+
+# Ignore test artifacts
+tmp_*/

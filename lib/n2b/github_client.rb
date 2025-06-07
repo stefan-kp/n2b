@@ -214,7 +214,9 @@ module N2B
     end
 
     def get_config(reconfigure: false, advanced_flow: false)
-      {}
+      # Return the config that was passed during initialization
+      # This is used for template resolution and other configuration needs
+      @config
     end
 
     def test_connection

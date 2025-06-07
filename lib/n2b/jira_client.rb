@@ -642,9 +642,9 @@ module N2B
     end
 
     def get_config(reconfigure: false, advanced_flow: false)
-      # This should match the config loading from the main CLI
-      # For now, return empty hash - will be enhanced when config system is unified
-      {}
+      # Return the config that was passed during initialization
+      # This is used for template resolution and other configuration needs
+      @config
     end
 
     def convert_markdown_to_adf(markdown_text)
