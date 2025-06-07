@@ -2,41 +2,50 @@
 
 [![Gem Version](https://badge.fury.io/rb/n2b.svg)](https://badge.fury.io/rb/n2b)
 
+**Transform your development workflow with intelligent command translation, code analysis, and seamless Jira/GitHub integration.** N2B provides a suite of tools to enhance productivity.
+
+> **IMPORTANT: Command Restructuring in v2.0**
+>
+> The `n2b` and `n2b-diff` commands have been restructured in version 2.0.
+> * `n2b` is now solely for natural language to shell command translation.
+> * `n2b-diff` handles both AI-powered merge conflict resolution AND AI-powered code diff analysis (previously `n2b --diff`).
+>
+> Please see our [MIGRATION.md](MIGRATION.md) for details on adapting your commands and workflows.
+
 **Transform your development workflow with intelligent code analysis and seamless Jira integration.** N2B is an AI-powered development tool that revolutionizes code review, requirements compliance, and project management through automated diff analysis, smart merge conflict resolution, and intelligent ticket integration.
 
 ## 🚀 **Key Features**
 
-### 🎯 **Smart Jira Integration**
-- **Automated Ticket Analysis**: Fetch requirements from Jira tickets and analyze code changes against them
-- **Intelligent Updates**: Post beautifully formatted analysis results directly to Jira with collapsible sections
-- **Requirements Extraction**: Automatically identify acceptance criteria, tasks, and requirements from tickets and comments
-- **Real-time Feedback**: Get instant compliance checking and implementation guidance
+### 🎯 **Smart Jira & GitHub Integration (via `n2b-diff --analyze`)**
+- **Automated Ticket/Issue Analysis**: Fetch requirements from Jira tickets or GitHub issues and analyze code changes against them using `n2b-diff --analyze`.
+- **Intelligent Updates**: Post beautifully formatted analysis results directly to Jira or GitHub.
+- **Requirements Extraction**: Automatically identify acceptance criteria and tasks.
+- **Real-time Feedback**: Get instant compliance checking.
 
-### 🔗 **GitHub Issue Integration**
-- **Fetch Issues**: Pull issue details from GitHub repositories
-- **Automated Updates**: Post formatted analysis results back to GitHub issues
+### 🔍 **AI-Powered Code Diff Analysis (via `n2b-diff --analyze`)**
+- **Context-Aware Diff Review**: Intelligent analysis of `git`/`hg` changes.
+- **Requirements Compliance**: Automated verification against project requirements.
+- **Test Coverage Assessment**: Evaluate test completeness.
+- **Security & Quality Insights**: Identify potential issues and improvements.
+- **Custom Instructions**: Guide the AI analysis with the `-m/--message` option.
 
-### 🔍 **AI-Powered Code Analysis**
-- **Context-Aware Diff Review**: Intelligent analysis of git/hg changes with comprehensive insights
-- **Requirements Compliance**: Automated verification against project requirements and acceptance criteria
-- **Test Coverage Assessment**: Evaluate test completeness and suggest improvements
-- **Security & Quality Insights**: Identify potential issues, risks, and improvement opportunities
+### コマンド変換 (via `n2b`)
+- **Natural Language to Shell**: Convert descriptions to executable shell commands.
 
 ### 🤖 **Flexible AI Support**
-- **Multiple LLM Providers**: Claude, OpenAI, Gemini, OpenRouter, Ollama
-- **Latest Models**: OpenAI O3/O4 series, Gemini 2.5, Claude Sonnet 4.0
-- **Custom Models**: Support for fine-tuned models, beta releases, and custom deployments
+- **Multiple LLM Providers**: Claude, OpenAI, Gemini, OpenRouter, Ollama.
+- **Latest Models**: Support for cutting-edge models from various providers.
+- **Custom Models**: Use fine-tuned models and custom deployments.
 
 ### 💻 **Development Workflow**
-- **Natural Language Commands**: Convert descriptions to executable bash commands
-- **Ruby Code Generation**: Generate Ruby code from natural language instructions
-- **VCS Integration**: Full Git and Mercurial support with branch comparison
-- **AI Merge Conflict Resolution**: Interactive merge conflict resolver with intelligent suggestions
-- **Errbit Integration**: Analyze errors and generate actionable reports
+- **AI Merge Conflict Resolution (via `n2b-diff`)**: Interactive merge conflict resolver.
+- **Ruby Code Generation (IRB/Console)**: Generate Ruby code from natural language.
+- **VCS Integration**: Git and Mercurial support in `n2b-diff`.
+- **Errbit Integration (IRB/Console)**: Analyze errors and generate reports.
 
-## 🔍 **AI-Powered Diff Analysis** ⚡ *Beta Feature*
+## 🔍 **AI-Powered Diff Analysis with `n2b-diff --analyze`** ⚡ *Beta Feature*
 
-**Get instant, intelligent code review for every change you make.** Our AI-powered diff analysis provides comprehensive insights into your code changes, helping you catch issues early and maintain high code quality.
+**Get instant, intelligent code review for every change you make.** The `n2b-diff --analyze` command provides comprehensive insights into your code changes, helping you catch issues early and maintain high code quality.
 
 ### ✨ **What Makes It Special**
 
@@ -51,13 +60,13 @@
 
 ```bash
 # Analyze your current changes
-n2b --diff
+n2b-diff --analyze
 
-# Compare against main branch with requirements checking
-n2b --diff --branch main --requirements requirements.md
+# Compare against main branch with requirements checking and a custom message
+n2b-diff --analyze --branch main --requirements requirements.md -m "Focus on security aspects"
 
 # Full workflow with Jira integration
-n2b --diff --jira PROJ-123 --jira-update
+n2b-diff --analyze --jira PROJ-123 --update
 ```
 
 ### 💬 **We Want Your Feedback!**
@@ -70,9 +79,9 @@ This is a **beta feature** and we're actively improving it based on real-world u
 
 ---
 
-## 🎯 **Jira Integration - Get Started in 2 Minutes**
+## 🎯 **Jira & GitHub Integration with `n2b-diff --analyze`**
 
-Transform your development workflow with intelligent Jira integration:
+Transform your development workflow with intelligent Jira and GitHub issue integration:
 
 ### Quick Setup
 
@@ -82,10 +91,13 @@ gem install n2b
 n2b --advanced-config  # Set up Jira credentials
 
 # Test your connection
-n2b-test-jira
+n2b-test-jira # (This command might need review if its scope changes)
 
 # Analyze code against ticket requirements
-n2b --diff --jira PROJ-123 --jira-update
+n2b-diff --analyze --jira PROJ-123 --update
+
+# Analyze code against GitHub issue requirements
+n2b-diff --analyze --github your-org/your-repo/issues/42 --update
 ```
 
 ### What You Get
@@ -100,27 +112,41 @@ n2b --diff --jira PROJ-123 --jira-update
 ```bash
 # Working on ticket PROJ-123
 git add .
-n2b --diff --jira PROJ-123 --jira-update
+n2b-diff --analyze --jira PROJ-123 --update
 ```
 
-**Result**: Your Jira ticket gets updated with a professional analysis comment showing implementation progress, technical insights, and compliance status.
+**Result**: Your Jira ticket (or GitHub issue) gets updated with a professional analysis comment showing implementation progress, technical insights, and compliance status.
 
-## 🔍 **AI-Powered Code Analysis**
+## 🔍 **AI-Powered Code Analysis & Command Translation**
 
-Get comprehensive code review and insights:
+N2B offers two primary commands for different aspects of your workflow:
 
-```bash
-# Analyze uncommitted changes
-n2b --diff
+**1. `n2b` (Natural Language to Shell Commands)**
+   Use `n2b` for translating your plain English (or other language) descriptions into shell commands.
+   ```bash
+   n2b "list all ruby files modified in the last 2 days"
+   n2b -x "create a backup of my_app.log"
+   ```
 
-# Compare against specific branch with requirements
-n2b --diff --branch main --requirements requirements.md
+**2. `n2b-diff` (Merge Conflict Resolution & Diff Analysis)**
+   Use `n2b-diff` for AI-assisted merge conflict resolution and for detailed AI-powered analysis of your code changes (diffs).
 
-# Full workflow with Jira integration
-n2b --diff --jira PROJ-123 --requirements specs.md
-```
+   **Diff Analysis Examples:**
+   ```bash
+   # Analyze uncommitted changes
+   n2b-diff --analyze
 
-## 🆕 **What's New in v0.7.2**
+   # Compare against specific branch with requirements and custom message
+   n2b-diff --analyze --branch main --requirements requirements.md -m "Ensure all new functions are documented."
+
+   # Full workflow with Jira integration
+   n2b-diff --analyze --jira PROJ-123 --requirements specs.md --update
+   ```
+
+## 🆕 **What's New in v2.0 (Highlights)**
+* **Command Restructuring**: `n2b` for command translation, `n2b-diff` for merge conflicts and all-new AI diff analysis. See [MIGRATION.md](MIGRATION.md).
+* **Custom Messages for Analysis**: Guide the AI's focus during diff analysis using the `-m/--message` option with `n2b-diff --analyze`.
+* **Enhanced `n2b-diff`**: Now the central hub for code analysis, supporting branches, requirements files, Jira/GitHub integration, and custom analysis instructions.
 
 - **🔗 GitHub Integration**: Full GitHub issue support with fetch and comment functionality
 - **🔍 Enhanced AI Diff Analysis**: Comprehensive code review with context-aware insights (Beta)
@@ -226,30 +252,33 @@ hg merge
 
 ## Quick Start
 
-### 🔍 **AI-Powered Code Review** (⚡ Beta - Try It Now!)
+### 🔍 **AI-Powered Code Review (using `n2b-diff --analyze`)** (⚡ Beta - Try It Now!)
 
 ```bash
 # Get instant AI analysis of your changes
-n2b --diff
+n2b-diff --analyze
 
-# Compare against main branch with requirements checking
-n2b --diff --branch main --requirements specs.md
+# Compare against main branch with requirements checking and custom message
+n2b-diff --analyze --branch main --requirements specs.md -m "Check for API compatibility."
 
 # Full workflow with Jira integration
-n2b --diff --jira PROJ-123 --jira-update
+n2b-diff --analyze --jira PROJ-123 --update
 ```
 
-### 🎯 **For Jira Users** (Most Popular)
+### 🎯 **For Jira & GitHub Users (Code Analysis)**
 
 ```bash
-# Set up Jira integration
+# Set up Jira/GitHub integration (done once via n2b's config)
 n2b --advanced-config
 
-# Analyze code changes against ticket
-n2b --diff --jira PROJ-123 --jira-update
+# Analyze code changes against a Jira ticket
+n2b-diff --analyze --jira PROJ-123 --update
+
+# Analyze code changes against a GitHub issue
+n2b-diff --analyze --github your-org/your-repo/issues/42 --update
 ```
 
-### 💻 **For Command Generation**
+### 💻 **For Command Generation (using `n2b`)**
 
 ```bash
 # Generate bash commands
@@ -471,24 +500,39 @@ Configuration is stored in `~/.n2b/config.yml`.
 
 Basic usage:
 
-n2b [options] your natural language instruction
+n2b [options] "your natural language instruction"
 
-Options:
-- `-x` or `--execute`: Execute the generated commands after confirmation
-- `-d` or `--diff`: Analyze git/hg diff with AI-powered code review
-- `-b` or `--branch [BRANCH]`: Compare against specific branch (auto-detects main/master/default)
-- `-r` or `--requirements FILE`: Requirements file for compliance checking
-- `-j` or `--jira TICKET`: Jira ticket ID or URL for context and updates
-- `--jira-update`: Automatically update Jira ticket with analysis (no prompt)
-- `--jira-no-update`: Skip Jira ticket update (analyze only)
-- `-c` or `--config`: Reconfigure the tool
-- `--advanced-config`: Advanced configuration including Jira setup
-- `-v` or `--version`: Show version information
-- `-h` or `--help`: Display help information
+**`n2b` Options:**
+- `-x`, `--execute`: Execute the translated commands after confirmation.
+- `-c`, `--config`: Configure N2B (API key, model, privacy settings, etc.).
+- `--advanced-config`: Access advanced configuration options.
+- `-v`, `--version`: Show version information.
+- `-h`, `--help`: Display help information for `n2b`.
 
-**Additional Commands:**
-- `n2b-diff FILE`: AI-powered merge conflict resolution
-- `n2b-test-jira`: Test Jira API connection and permissions
+**`n2b-diff` Command Usage:**
+
+`n2b-diff [FILE] [options]` (for merge conflicts)
+`n2b-diff --analyze [options]` (for code diff analysis)
+
+**`n2b-diff` Options:**
+  *Merge Conflict Mode (when FILE is provided and not --analyze):*
+    - `--context N`: Number of context lines to display around a merge conflict.
+  *Diff Analysis Mode (`--analyze`):*
+    - `-a`, `--analyze`: Activate AI-powered diff analysis.
+    - `--branch [BRANCH_NAME]`: Specify branch to compare against (e.g., 'main', 'develop'). Defaults to auto-detected primary branch.
+    - `-j`, `--jira JIRA_ID_OR_URL`: Link a Jira ticket for context or updates.
+    - `--github GITHUB_ISSUE_URL`: Link a GitHub issue for context or updates (e.g., 'owner/repo/issues/123').
+    - `-r`, `--requirements FILE_PATH`: Provide a requirements file for the AI.
+    - `-m`, `--message "TEXT"`: Add custom instructions for the AI analysis.
+    - `--update`: If -j or --github is used, attempt to update the ticket/issue with the analysis (prompts for confirmation by default unless this flag is used for auto-yes).
+    - `--no-update`: Prevent updating the ticket/issue.
+  *Common for `n2b-diff`:*
+    - `-h`, `--help`: Display help information for `n2b-diff`.
+    - `-v`, `--version`: Show version information.
+
+
+**Other Commands:**
+- `n2b-test-jira`: Test Jira API connection and permissions (functionality might be reviewed/updated).
 
 Examples:
 
@@ -504,36 +548,32 @@ Examples:
 
 ```n2b -c  ```
 
-## 🔍 AI-Powered Diff Analysis
+## 🔍 AI-Powered Diff Analysis (using `n2b-diff --analyze`)
 
-N2B provides comprehensive AI-powered code review for your git and mercurial repositories.
+`n2b-diff --analyze` provides comprehensive AI-powered code review for your Git and Mercurial repositories.
 
 ### Basic Diff Analysis
 
 ```bash
-# Analyze uncommitted changes
-n2b --diff
+# Analyze uncommitted changes (against HEAD or default compare target)
+n2b-diff --analyze
 
-# Analyze changes against specific branch
-n2b --diff --branch main
-n2b --diff --branch feature/auth
+# Analyze changes against a specific branch
+n2b-diff --analyze --branch main
+n2b-diff --analyze --branch feature/auth
 
-# Auto-detect default branch (main/master/default)
-n2b --diff --branch
-
-# Short form
-n2b -d -b main
+# Auto-detect default branch (main/master/default) if --branch is provided without a value
+n2b-diff --analyze --branch
 ```
 
-### Requirements Compliance Checking
+### Requirements Compliance Checking & Custom Instructions
 
 ```bash
-# Check if changes meet requirements
-n2b --diff --requirements requirements.md
-n2b -d -r req.md
+# Check if changes meet requirements from a file
+n2b-diff --analyze --requirements requirements.md
 
-# Combine with branch comparison
-n2b --diff --branch main --requirements requirements.md
+# Combine with branch comparison and add a custom message for the AI
+n2b-diff --analyze --branch main --requirements requirements.md -m "Pay special attention to the new UserProfile class."
 ```
 
 ### What You Get
@@ -581,9 +621,9 @@ Requirements Evaluation:
 - **Git**: Full support with auto-detection of main/master branches
 - **Mercurial (hg)**: Full support with auto-detection of default branch
 
-## 🎯 Jira Integration
+## 🎯 Jira & GitHub Integration (with `n2b-diff --analyze`)
 
-N2B provides seamless integration with Jira for automated ticket analysis and updates.
+`n2b-diff --analyze` provides seamless integration with Jira and GitHub for automated ticket/issue analysis and updates.
 
 ### Setup
 
@@ -619,16 +659,19 @@ Your API token needs these specific scopes:
 
 ```bash
 # Analyze code changes against Jira ticket requirements
-n2b --diff --jira PROJ-123
+n2b-diff --analyze --jira PROJ-123
 
 # Use full Jira URL
-n2b --diff --jira https://company.atlassian.net/browse/PROJ-123
+n2b-diff --analyze --jira https://company.atlassian.net/browse/PROJ-123
 
-# Auto-update ticket without prompt
-n2b --diff --jira PROJ-123 --jira-update
+# Auto-update Jira ticket without prompt (if configured and supported by client)
+n2b-diff --analyze --jira PROJ-123 --update
 
-# Analyze only (no ticket update)
-n2b --diff --jira PROJ-123 --jira-no-update
+# Analyze only, do not offer to update Jira ticket
+n2b-diff --analyze --jira PROJ-123 --no-update
+
+# Analyze code changes against GitHub issue, with custom message and update
+n2b-diff --analyze --github your-org/your-repo/issues/42 -m "Focus on UI changes" --update
 ```
 
 ### What It Does
@@ -870,9 +913,9 @@ done
 Add to your `.zshrc` or `.bashrc`:
 ```bash
 # Quick aliases for n2b tools
-alias resolve-conflicts='n2b-diff'
-alias test-jira='n2b-test-jira'
-alias ai-diff='n2b --diff'
+alias resolve-conflicts='n2b-diff' # For merge conflicts
+alias test-jira='n2b-test-jira'   # For testing Jira connection
+alias ai-diff='n2b-diff --analyze' # For AI diff analysis
 
 # Function to resolve all conflict files
 resolve-all-conflicts() {
@@ -944,31 +987,57 @@ This project is licensed under the MIT License.
 
 ## Version History
 
-### 🔧 **v0.5.4 - AI-Powered Merge Conflict Resolver**
-- **NEW: n2b-diff command** - Interactive AI-powered merge conflict resolution
-- Colorized conflict display with Accept/Skip/Comment/Abort workflow
-- Smart AI suggestions with detailed reasoning and user feedback integration
-- Custom templates for merge prompts and configurable context lines
-- Merge logging and Git/Mercurial support
+### ✨ **v2.0.0 (Planned) - Command Restructure & Enhanced Diff Analysis**
+- **Command Restructuring**: `n2b` is now for natural language to shell command translation only. `n2b-diff` handles merge conflicts and all AI-powered diff/code analysis. See [MIGRATION.md](MIGRATION.md).
+- **Enhanced `n2b-diff --analyze`**:
+    - Added `--github` option for GitHub Issue integration (fetching details, updating issues).
+    - Added `-m, --message, --msg` option for providing custom instructions to the AI during diff analysis.
+    - Streamlined Jira integration options (`--jira`, `--update`, `--no-update`).
+    - Diff analysis features (branch comparison, requirements files) now exclusively under `n2b-diff --analyze`.
+- **Documentation Overhaul**: Updated README, help texts, and added `MIGRATION.md`.
+- **Test Suite Updates**: Refactored tests for `n2b` and significantly enhanced tests for `n2b-diff`.
+- **Internal Refinements**: Created `N2B::MessageUtils` for message handling.
 
-### 🚀 **v0.5.0 - Jira Integration & Enhanced Analysis**
-- Full Jira API integration with real ticket fetching and comment posting
-- Structured Jira comments using ADF with collapsible sections
-- Smart requirements extraction from ticket descriptions and comments
-- Built-in connection testing with `n2b-test-jira` utility
-- Enhanced configuration validation and error handling
+### 🔧 **v0.7.2 - GitHub Integration & Enhanced AI Diff Analysis (as `n2b --diff`)** (Pre-Restructure)
+- **🔗 GitHub Integration**: Full GitHub issue support with fetch and comment functionality
+- **🔍 Enhanced AI Diff Analysis**: Comprehensive code review with context-aware insights (Beta)
+- **☐ Interactive Jira Checklists**: Native checkboxes for team collaboration and progress tracking
+- **🎯 Full Template Engine**: Variables, loops, conditionals for maximum customization
+- **🚨 Smart Error Classification**: Automatic severity detection (Critical/Important/Low)
+- **📁 Editor Integration**: Open conflicted files in your preferred editor with change detection
+- **🛡️ JSON Auto-Repair**: Automatically fixes malformed LLM responses
+- **✅ VCS Auto-Resolution**: Automatically marks resolved conflicts in Git/Mercurial
+- **🎨 Collapsible Sections**: Organized Jira comments with expand/collapse functionality
+- **🧪 Comprehensive Tests**: 103+ tests ensuring bulletproof reliability
+- **⚡ Enhanced Context**: Full file content sent to AI for better merge decisions
+- **🔄 Robust Error Handling**: Multiple recovery options when AI responses fail
+
+
+### 🔧 **v0.5.4 - AI-Powered Merge Conflict Resolver (Introducing `n2b-diff`)**
+- **NEW: n2b-diff command** - Interactive AI-powered merge conflict resolution.
+- Colorized conflict display with Accept/Skip/Comment/Abort workflow.
+- Smart AI suggestions with detailed reasoning and user feedback integration.
+- Custom templates for merge prompts and configurable context lines.
+- Merge logging and Git/Mercurial support.
+
+### 🚀 **v0.5.0 - Jira Integration & Enhanced Analysis (as `n2b --diff`)**
+- Full Jira API integration with real ticket fetching and comment posting.
+- Structured Jira comments using ADF with collapsible sections.
+- Smart requirements extraction from ticket descriptions and comments.
+- Built-in connection testing with `n2b-test-jira` utility.
+- Enhanced configuration validation and error handling.
 
 ### 🔧 **v0.4.0 - Flexible Model Configuration**
-- Multiple LLM providers: Claude, OpenAI, Gemini, OpenRouter, Ollama
-- Custom model support for fine-tunes and beta releases
-- Latest models: OpenAI O3/O4 series, Gemini 2.5, Claude Sonnet 4.0
-- Backward compatible configuration system
+- Multiple LLM providers: Claude, OpenAI, Gemini, OpenRouter, Ollama.
+- Custom model support for fine-tunes and beta releases.
+- Latest models: OpenAI O3/O4 series, Gemini 2.5, Claude Sonnet 4.0.
+- Backward compatible configuration system.
 
-### 🔍 **v0.3.0 - AI-Powered Diff Analysis**
-- Git/Mercurial diff analysis with context extraction
-- Requirements compliance checking
-- Test coverage assessment
-- Branch comparison with auto-detection
+### 🔍 **v0.3.0 - AI-Powered Diff Analysis (as `n2b --diff`)**
+- Git/Mercurial diff analysis with context extraction.
+- Requirements compliance checking.
+- Test coverage assessment.
+- Branch comparison with auto-detection.
 
 ## Support
 

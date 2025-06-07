@@ -1,5 +1,32 @@
 # N2B Changelog
 
+## [2.0.0] - 2024-07-20
+
+### BREAKING CHANGES
+- **Command Restructuring:** The N2B CLI has undergone a major restructuring to simplify `n2b` and consolidate analysis features into `n2b-diff`.
+  - The `n2b` command is now exclusively for natural language to shell command translation and basic utilities (config, help, version).
+  - All functionalities related to code diff analysis, merge conflict resolution, and issue tracker integration (Jira, GitHub) have been moved to the `n2b-diff` command.
+  - Users performing diff analysis should migrate from `n2b --diff ...` to `n2b-diff --analyze ...`.
+  - Please see `MIGRATION.MD` for a detailed guide on updating your workflows.
+
+### Added
+- **Custom Analysis Messages for `n2b-diff`:** Introduced `-m/--message/--msg` options for `n2b-diff --analyze` to allow users to provide custom instructions or focus points for the AI-powered code analysis.
+- **GitHub Issue Integration for `n2b-diff`:** Added `--github <ISSUE_ID_OR_URL>` option to `n2b-diff --analyze` for fetching context from and updating GitHub issues, similar to the existing Jira integration.
+- **Dedicated `N2B::MessageUtils` module:** For handling validation, sanitization, and logging of user-provided messages.
+
+### Changed
+- `n2b-diff` is now the primary tool for all code analysis tasks, including those previously under `n2b --diff`. Its help text and options have been updated accordingly.
+- VCS utilities and issue tracker clients (`JiraClient`, `GitHubClient`) are now utilized by `n2b-diff`.
+- `lib/n2b/cli.rb` (for `n2b` command) has been streamlined, removing all diff analysis and direct issue tracker logic. Its help text now reflects its focused role.
+- Templates for Jira and GitHub comments (`jira_comment.txt`, `github_comment.txt`) updated to include custom analysis focus messages.
+
+### Removed
+- Diff analysis, branch comparison, requirements file processing, and Jira/GitHub integration flags and logic have been removed from the `n2b` command.
+- Obsolete tests related to removed `n2b` functionalities were deleted from `test/n2b/cli_test.rb`.
+
+### Fixed
+- (If any bugs were fixed as a direct result of this refactoring, they would be listed here. For this task, focusing on the restructure.)
+
 ## 0.7.2 (2025-01-27) - GitHub Integration & Enhanced Stability
 
 ### 🔗 GitHub Integration

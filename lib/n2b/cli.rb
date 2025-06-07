@@ -1,6 +1,3 @@
-require_relative 'jira_client' # For N2B::JiraClient
-require_relative 'github_client' # For N2B::GitHubClient
-
 module N2B
   class CLI < Base
     def self.run(args)
@@ -17,334 +14,27 @@ module N2B
       config = get_config(reconfigure: @options[:config], advanced_flow: @options[:advanced_config])
       user_input = @args.join(' ') # All remaining args form user input/prompt addition
 
-      if @options[:diff]
-        handle_diff_analysis(config)
-      elsif user_input.empty? # No input text after options
-        puts "Enter your natural language command:"
-        input_text = $stdin.gets.chomp
-        process_natural_language_command(input_text, config)
-      else # Natural language command
+      # Diff functionality has been removed from N2B::CLI
+      # if @options[:diff]
+      #   handle_diff_analysis(config)
+      # els
+      if user_input.empty? # No input text after options
+        # If config mode was chosen, it's handled by get_config.
+        # If not, and no input, prompt for it.
+        unless @options[:config] # Don't prompt if only -c or --advanced-config was used
+          puts "Enter your natural language command (or type 'exit' or 'quit'):"
+          input_text = $stdin.gets.chomp
+          exit if ['exit', 'quit'].include?(input_text.downcase)
+          process_natural_language_command(input_text, config)
+        end
+      else # Natural language command provided as argument
         process_natural_language_command(user_input, config)
       end
     end
 
     protected
 
-    def handle_diff_analysis(config)
-      vcs_type = get_vcs_type
-      if vcs_type == :none
-        puts "Error: Not a git or hg repository."
-        exit 1
-      end
-
-      # Get requirements file from parsed options
-      requirements_filepath = @options[:requirements]
-      user_prompt_addition = @args.join(' ') # All remaining args are user prompt addition
-
-      # Ticket / Issue Information
-      ticket_input = @options[:jira_ticket]
-      ticket_update_flag = @options[:jira_update] # true, false, or nil
-
-      requirements_content = nil # Initialize requirements_content
-
-      if ticket_input
-        tracker = config['issue_tracker'] || 'jira'
-        case tracker
-        when 'github'
-          puts "GitHub issue specified: #{ticket_input}"
-          if config['github'] && config['github']['repo'] && config['github']['access_token']
-            begin
-              github_client = N2B::GitHubClient.new(config)
-              puts "Fetching GitHub issue details..."
-              requirements_content = github_client.fetch_issue(ticket_input)
-              puts "Successfully fetched GitHub issue details."
-            rescue StandardError => e
-              puts "Error fetching GitHub issue: #{e.message}"
-              puts "Proceeding with diff analysis without GitHub issue details."
-            end
-          else
-            puts "GitHub configuration is missing or incomplete in N2B settings."
-            puts "Please configure GitHub using 'n2b -c' to fetch issue details."
-            puts "Proceeding with diff analysis without GitHub issue details."
-          end
-          if ticket_update_flag == true
-            puts "Note: issue update (--jira-update) is flagged."
-          elsif ticket_update_flag == false
-            puts "Note: issue will not be updated (--jira-no-update)."
-          end
-        else
-          puts "Jira ticket specified: #{ticket_input}"
-          if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
-            begin
-              jira_client = N2B::JiraClient.new(config)
-              puts "Fetching Jira ticket details..."
-              requirements_content = jira_client.fetch_ticket(ticket_input)
-              puts "Successfully fetched Jira ticket details."
-            rescue N2B::JiraClient::JiraApiError => e
-              puts "Error fetching Jira ticket: #{e.message}"
-              puts "Proceeding with diff analysis without Jira ticket details."
-            rescue ArgumentError => e
-              puts "Jira configuration error: #{e.message}"
-              puts "Please ensure Jira is configured correctly using 'n2b -c'."
-              puts "Proceeding with diff analysis without Jira ticket details."
-            rescue StandardError => e
-              puts "An unexpected error occurred while fetching Jira ticket: #{e.message}"
-              puts "Proceeding with diff analysis without Jira ticket details."
-            end
-          else
-            puts "Jira configuration is missing or incomplete in N2B settings."
-            puts "Please configure Jira using 'n2b -c' to fetch ticket details."
-            puts "Proceeding with diff analysis without Jira ticket details."
-          end
-          if ticket_update_flag == true
-            puts "Note: Jira ticket update (--jira-update) is flagged."
-          elsif ticket_update_flag == false
-            puts "Note: Jira ticket will not be updated (--jira-no-update)."
-          end
-        end
-      end
-
-      # Load requirements from file if no Jira ticket was fetched or if specifically desired even with Jira.
-      # Current logic: Jira fetch, if successful, populates requirements_content.
-      # If Jira not specified, or fetch failed, try to load from file.
-      if requirements_content.nil? && requirements_filepath
-        if File.exist?(requirements_filepath)
-          puts "Loading requirements from file: #{requirements_filepath}"
-          requirements_content = File.read(requirements_filepath)
-        else
-          puts "Error: Requirements file not found: #{requirements_filepath}"
-          # Decide if to exit or proceed. For now, proceed.
-          puts "Proceeding with diff analysis without file-based requirements."
-        end
-      elsif requirements_content && requirements_filepath
-        puts "Note: Both Jira ticket and requirements file were provided. Using Jira ticket content for analysis."
-      end
-
-      diff_output = execute_vcs_diff(vcs_type, @options[:branch])
-      analysis_result = analyze_diff(diff_output, config, user_prompt_addition, requirements_content) # Store the result
-
-      # --- Ticket Update Logic ---
-      if ticket_input && analysis_result && !analysis_result.empty?
-        tracker = config['issue_tracker'] || 'jira'
-        case tracker
-        when 'github'
-          if config['github'] && config['github']['repo'] && config['github']['access_token']
-            comment_data = format_analysis_for_github(analysis_result)
-            proceed_with_update = false
-
-            if ticket_update_flag == true
-              proceed_with_update = true
-            elsif ticket_update_flag.nil?
-              puts "\nWould you like to update GitHub issue #{ticket_input} with this analysis? (y/n)"
-              user_choice = $stdin.gets.chomp.downcase
-              proceed_with_update = user_choice == 'y'
-            end
-
-            if proceed_with_update
-              begin
-                update_client = N2B::GitHubClient.new(config)
-                puts "Updating GitHub issue #{ticket_input}..."
-                if update_client.update_issue(ticket_input, comment_data)
-                  puts "GitHub issue #{ticket_input} updated successfully."
-                else
-                  puts "Failed to update GitHub issue #{ticket_input}."
-                end
-              rescue StandardError => e
-                puts "Error updating GitHub issue: #{e.message}"
-              end
-            else
-              puts "Issue update skipped."
-            end
-          else
-            puts "GitHub configuration is missing or incomplete. Cannot proceed with issue update."
-          end
-        else
-          # Jira update logic
-          if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
-            jira_comment_data = format_analysis_for_jira(analysis_result)
-            proceed_with_update = false
-
-            if ticket_update_flag == true
-              proceed_with_update = true
-            elsif ticket_update_flag.nil?
-              puts "\nWould you like to update Jira ticket #{ticket_input} with this analysis? (y/n)"
-              user_choice = $stdin.gets.chomp.downcase
-              proceed_with_update = user_choice == 'y'
-            end
-
-            if proceed_with_update
-              begin
-                update_jira_client = N2B::JiraClient.new(config)
-                puts "Updating Jira ticket #{ticket_input}..."
-                if update_jira_client.update_ticket(ticket_input, jira_comment_data)
-                  puts "Jira ticket #{ticket_input} updated successfully."
-                else
-                  puts "Failed to update Jira ticket #{ticket_input}. The client did not report an error, but the update may not have completed."
-                end
-              rescue N2B::JiraClient::JiraApiError => e
-                puts "Error updating Jira ticket: #{e.message}"
-              rescue ArgumentError => e
-                puts "Jira configuration error before update: #{e.message}"
-              rescue StandardError => e
-                puts "An unexpected error occurred while updating Jira ticket: #{e.message}"
-              end
-            else
-              puts "Jira ticket update skipped."
-            end
-          else
-            puts "Jira configuration is missing or incomplete. Cannot proceed with Jira update."
-          end
-        end
-      elsif ticket_input && (analysis_result.nil? || analysis_result.empty?)
-        puts "Skipping ticket update as analysis result was empty or not generated."
-      end
-      # --- End of Ticket Update Logic ---
-
-      analysis_result # Return analysis_result from handle_diff_analysis
-    end
-
-    def get_vcs_type
-      if Dir.exist?(File.join(Dir.pwd, '.git'))
-        :git
-      elsif Dir.exist?(File.join(Dir.pwd, '.hg'))
-        :hg
-      else
-        :none
-      end
-    end
-
-    def execute_vcs_diff(vcs_type, branch_option = nil)
-      case vcs_type
-      when :git
-        if branch_option
-          target_branch = branch_option == 'auto' ? detect_git_default_branch : branch_option
-          if target_branch
-            # Validate that the target branch exists
-            unless validate_git_branch_exists(target_branch)
-              puts "Error: Branch '#{target_branch}' does not exist."
-              puts "Available branches:"
-              puts `git branch -a`.lines.map(&:strip).reject(&:empty?)
-              exit 1
-            end
-
-            puts "Comparing current branch against '#{target_branch}'..."
-            `git diff #{target_branch}...HEAD`
-          else
-            puts "Could not detect default branch, falling back to HEAD diff..."
-            `git diff HEAD`
-          end
-        else
-          `git diff HEAD`
-        end
-      when :hg
-        if branch_option
-          target_branch = branch_option == 'auto' ? detect_hg_default_branch : branch_option
-          if target_branch
-            # Validate that the target branch exists
-            unless validate_hg_branch_exists(target_branch)
-              puts "Error: Branch '#{target_branch}' does not exist."
-              puts "Available branches:"
-              puts `hg branches`.lines.map(&:strip).reject(&:empty?)
-              exit 1
-            end
-
-            puts "Comparing current branch against '#{target_branch}'..."
-            `hg diff -r #{target_branch}`
-          else
-            puts "Could not detect default branch, falling back to standard diff..."
-            `hg diff`
-          end
-        else
-          `hg diff`
-        end
-      else
-        "" # Should not happen if get_vcs_type logic is correct and checked before calling
-      end
-    end
-
-    def detect_git_default_branch
-      # Try multiple methods to detect the default branch
-
-      # Method 1: Check origin/HEAD symbolic ref
-      result = `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`.strip
-      if $?.success? && !result.empty?
-        return result.split('/').last
-      end
-
-      # Method 2: Check remote show origin
-      result = `git remote show origin 2>/dev/null | grep "HEAD branch"`.strip
-      if $?.success? && !result.empty?
-        match = result.match(/HEAD branch:\s*(\w+)/)
-        return match[1] if match
-      end
-
-      # Method 3: Check if common default branches exist
-      ['main', 'master'].each do |branch|
-        result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
-        if $?.success?
-          return branch
-        end
-      end
-
-      # Method 4: Fallback - check local branches
-      ['main', 'master'].each do |branch|
-        result = `git rev-parse --verify #{branch} 2>/dev/null`
-        if $?.success?
-          return branch
-        end
-      end
-
-      # If all else fails, return nil
-      nil
-    end
-
-    def detect_hg_default_branch
-      # Method 1: Check current branch (if it's 'default', that's the main branch)
-      result = `hg branch 2>/dev/null`.strip
-      if $?.success? && result == 'default'
-        return 'default'
-      end
-
-      # Method 2: Look for 'default' branch in branch list
-      result = `hg branches 2>/dev/null`
-      if $?.success? && result.include?('default')
-        return 'default'
-      end
-
-      # Method 3: Check if there are any branches at all
-      result = `hg branches 2>/dev/null`.strip
-      if $?.success? && !result.empty?
-        # Get the first branch (usually the main one)
-        first_branch = result.lines.first&.split&.first
-        return first_branch if first_branch
-      end
-
-      # Fallback to 'default' (standard hg main branch name)
-      'default'
-    end
-
-    def validate_git_branch_exists(branch)
-      # Check if branch exists locally
-      _result = `git rev-parse --verify #{branch} 2>/dev/null`
-      return true if $?.success?
-
-      # Check if branch exists on remote
-      _result = `git rev-parse --verify origin/#{branch} 2>/dev/null`
-      return true if $?.success?
-
-      false
-    end
-
-    def validate_hg_branch_exists(branch)
-      # Check if branch exists in hg branches
-      result = `hg branches 2>/dev/null`
-      if $?.success?
-        return result.lines.any? { |line| line.strip.start_with?(branch) }
-      end
-
-      # If we can't list branches, assume it exists (hg is more permissive)
-      true
-    end
+    # All diff-related methods like handle_diff_analysis, get_vcs_type, etc., are removed.
 
     private
 
@@ -605,41 +295,6 @@ REQUIREMENTS_BLOCK
       context_sections
     end
 
-    def call_llm_for_diff_analysis(prompt, config)
-      begin
-        llm_service_name = config['llm']
-        llm = case llm_service_name
-              when 'openai'
-                N2M::Llm::OpenAi.new(config)
-              when 'claude'
-                N2M::Llm::Claude.new(config)
-              when 'gemini'
-                N2M::Llm::Gemini.new(config)
-              when 'openrouter'
-                N2M::Llm::OpenRouter.new(config)
-              when 'ollama'
-                N2M::Llm::Ollama.new(config)
-              else
-                # Should not happen if config is validated, but as a safeguard:
-                raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
-              end
-
-        puts "🔍 AI is analyzing your code diff..."
-        response_json_str = analyze_diff_with_spinner(llm, prompt)
-        response_json_str
-      rescue N2B::LlmApiError => e # This catches errors from analyze_code_diff
-        puts "Error communicating with the LLM: #{e.message}"
-
-        # Check if it might be a model-related error
-        if e.message.include?('model') || e.message.include?('Model') || e.message.include?('invalid') || e.message.include?('not found')
-          puts "\nThis might be due to an invalid or unsupported model configuration."
-          puts "Run 'n2b -c' to reconfigure your model settings."
-        end
-
-        return '{"summary": "Error: Could not analyze diff due to LLM API error.", "errors": [], "improvements": []}'
-      end
-    end
-    
     def append_to_llm_history_file(commands)
       File.open(HISTORY_FILE, 'a') do |file|
         file.puts(commands)
@@ -849,31 +504,6 @@ REQUIREMENTS_BLOCK
       end
     end
 
-    def analyze_diff_with_spinner(llm, prompt)
-      spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-      spinner_thread = Thread.new do
-        i = 0
-        while true
-          print "\r🔍 #{spinner_chars[i % spinner_chars.length]} Analyzing diff..."
-          $stdout.flush
-          sleep(0.1)
-          i += 1
-        end
-      end
-
-      begin
-        result = llm.analyze_code_diff(prompt)
-        spinner_thread.kill
-        print "\r#{' ' * 30}\r"  # Clear the spinner line
-        puts "✅ Diff analysis complete!"
-        result
-      rescue => e
-        spinner_thread.kill
-        print "\r#{' ' * 30}\r"  # Clear the spinner line
-        raise e
-      end
-    end
-
     def attempt_json_repair_for_commands(malformed_response, llm)
       repair_prompt = <<~PROMPT
         The following response was supposed to be valid JSON with keys "commands" (array) and "explanation" (string), but it has formatting issues. Please fix it and return ONLY the corrected JSON:
@@ -917,62 +547,40 @@ REQUIREMENTS_BLOCK
       options = {
         execute: false,
         config: nil,
-        diff: false,
-        requirements: nil,
-        branch: nil,
-        jira_ticket: nil,
-        jira_update: nil, # Using nil as default, true for --jira-update, false for --jira-no-update
-        advanced_config: false # New option for advanced configuration flow
+        # diff: false, # Removed
+        # requirements: nil, # Removed
+        # branch: nil, # Removed
+        # jira_ticket: nil, # Removed
+        # jira_update: nil, # Removed
+        advanced_config: false
       }
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: n2b [options] [natural language command]"
 
-        opts.on('-x', '--execute', 'Execute the commands after confirmation') do
+        opts.on('-x', '--execute', 'Execute the translated commands after confirmation.') do
           options[:execute] = true
         end
 
-        opts.on('-d', '--diff', 'Analyze git/hg diff with AI') do
-          options[:diff] = true
+        # Removed options: -d, --diff, -b, --branch, -r, --requirements, -j, --jira, --jira-update, --jira-no-update
+
+        opts.on('-c', '--config', 'Configure N2B (API key, model, privacy settings, etc.).') do
+          options[:config] = true
         end
 
-        opts.on('-b', '--branch [BRANCH]', 'Compare against branch (default: auto-detect main/master)') do |branch|
-          options[:branch] = branch || 'auto'
+        opts.on('--advanced-config', 'Access advanced configuration options.') do
+          options[:advanced_config] = true
+          options[:config] = true # --advanced-config implies -c
         end
 
-        opts.on('-r', '--requirements FILE', 'Requirements file for diff analysis') do |file|
-          options[:requirements] = file
-        end
-
-        opts.on('-j', '--jira JIRA_ID_OR_URL', 'Jira ticket ID or URL for context or update') do |jira|
-          options[:jira_ticket] = jira
-        end
-
-        opts.on('--jira-update', 'Update the linked Jira ticket (requires -j)') do
-          options[:jira_update] = true
-        end
-
-        opts.on('--jira-no-update', 'Do not update the linked Jira ticket (requires -j)') do
-          options[:jira_update] = false
-        end
-
-        opts.on('-h', '--help', 'Print this help') do
+        opts.on_tail('-h', '--help', 'Show this help message.') do
           puts opts
           exit
         end
 
-        opts.on('-v', '--version', 'Show version') do
-          puts "n2b version #{N2B::VERSION}"
+        opts.on_tail('-v', '--version', 'Show version.') do
+          puts "n2b version #{N2B::VERSION}" # Assuming N2B::VERSION is defined
           exit
-        end
-
-        opts.on('-c', '--config', 'Configure the API key and model') do
-          options[:config] = true
-        end
-
-        opts.on('--advanced-config', 'Access advanced configuration options including Jira and privacy settings') do
-          options[:advanced_config] = true
-          options[:config] = true # Forcing config mode if advanced is chosen
         end
       end
 
@@ -983,36 +591,14 @@ REQUIREMENTS_BLOCK
         puts ""
         puts parser.help
         exit 1
-      end
-
-      # Validate option combinations
-      if options[:branch] && !options[:diff]
-        puts "Error: --branch option can only be used with --diff"
+      rescue OptionParser::MissingArgument => e
+        puts "Error: #{e.message}"
         puts ""
         puts parser.help
         exit 1
       end
 
-      if options[:jira_update] == true && options[:jira_ticket].nil?
-        puts "Error: --jira-update option requires a Jira ticket to be specified with -j or --jira."
-        puts ""
-        puts parser.help
-        exit 1
-      end
-
-      if options[:jira_update] == false && options[:jira_ticket].nil?
-        puts "Error: --jira-no-update option requires a Jira ticket to be specified with -j or --jira."
-        puts ""
-        puts parser.help
-        exit 1
-      end
-
-      if options[:jira_update] == true && options[:jira_update] == false
-        puts "Error: --jira-update and --jira-no-update are mutually exclusive."
-        puts ""
-        puts parser.help
-        exit 1
-      end
+      # Removed validation logic for diff/jira related options
 
       options
     end

@@ -4,6 +4,13 @@
 *Implementation Summary:*
 {implementation_summary}
 
+{{#if custom_analysis_focus}}
+---
+*Custom Analysis Focus:*
+{quote}
+{{custom_analysis_focus}}
+{quote}
+{{/if}}
 ---
 
 *Automated Analysis Findings:*

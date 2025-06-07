@@ -3,6 +3,12 @@
 **Implementation Summary**
 {implementation_summary}
 
+{{#if custom_analysis_focus}}
+---
+
+**Custom Analysis Focus**
+> {{custom_analysis_focus}}
+{{/if}}
 ---
 
 {#if critical_errors_empty}
