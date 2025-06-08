@@ -1,5 +1,6 @@
 require 'shellwords'
 require 'rbconfig'
+require_relative 'message_utils'
 
 module N2B
   class MergeCLI < Base
@@ -99,13 +100,18 @@ module N2B
     private
 
     def parse_options
-      options = { context_lines: MergeConflictParser::DEFAULT_CONTEXT_LINES }
+      options = { context_lines: MergeConflictParser::DEFAULT_CONTEXT_LINES, message: nil }
       parser = OptionParser.new do |opts|
         opts.banner = 'Usage: n2b-diff FILE [options]'
         opts.on('--context N', Integer, 'Context lines (default: 10)') { |v| options[:context_lines] = v }
+        msg_desc = 'Custom instructions for diff analysis'
+        opts.on('-m MESSAGE', '--message MESSAGE', '--msg MESSAGE', msg_desc) do |v|
+          options[:message] = v
+        end
         opts.on('-h', '--help', 'Show this help') { puts opts; exit }
       end
       parser.parse!(@args)
+      options[:message] = N2B::MessageUtils.sanitize(options[:message])
       options
     end
 
@@ -217,15 +223,18 @@ module N2B
       template = File.read(template_path)
 
       user_comment_text = comment && !comment.empty? ? "User comment: #{comment}" : ""
+      custom_message = @options[:message]
+      message_text = custom_message && !custom_message.empty? ? "Custom instructions: #{custom_message}\n\n" : ""
 
-      template.gsub('{full_file_content}', full_file_content.to_s)
-              .gsub('{context_before}', block.context_before.to_s)
-              .gsub('{base_label}', block.base_label.to_s)
-              .gsub('{base_content}', block.base_content.to_s)
-              .gsub('{incoming_content}', block.incoming_content.to_s)
-              .gsub('{incoming_label}', block.incoming_label.to_s)
-              .gsub('{context_after}', block.context_after.to_s)
-              .gsub('{user_comment}', user_comment_text)
+      (message_text + template)
+        .gsub('{full_file_content}', full_file_content.to_s)
+        .gsub('{context_before}', block.context_before.to_s)
+        .gsub('{base_label}', block.base_label.to_s)
+        .gsub('{base_content}', block.base_content.to_s)
+        .gsub('{incoming_content}', block.incoming_content.to_s)
+        .gsub('{incoming_label}', block.incoming_label.to_s)
+        .gsub('{context_after}', block.context_after.to_s)
+        .gsub('{user_comment}', user_comment_text)
     end
 
     def call_llm_for_merge(prompt, config)
