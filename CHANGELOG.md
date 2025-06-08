@@ -1,5 +1,39 @@
 # N2B Changelog
 
+## [2.0.1] - 2025-01-08
+
+### 🎯 **Major Jira Integration Enhancements**
+- **Enhanced Jira Comment Formatting**: Professional, structured comments with collapsible sections
+- **Template-Based Approach**: All formatting now properly handled in templates, not hardcoded
+- **Clean Requirements Display**: Removed redundant checkbox symbols for cleaner presentation
+- **Debug Environment Variable**: Added `N2B_DEBUG=true` for detailed troubleshooting output
+- **Improved Footer**: Simplified footer without problematic color syntax
+
+### 🔧 **HTML Merge Log System**
+- **4-Column Layout**: Base branch code, incoming branch code, final resolution, and resolution details
+- **Beautiful Styling**: Modern HTML design with color-coded sections and responsive layout
+- **Rich Metadata**: Conflict statistics, timestamps, resolution methods, and LLM analysis
+- **Professional Audit Trail**: Perfect for code reviews, compliance, and team collaboration
+- **Method Detection**: Automatic classification of LLM vs Manual vs Skip vs Abort resolutions
+
+### 🎨 **Enhanced User Experience**
+- **Better Conflict Display**: Shows 3 lines of context before/after conflicts for better understanding
+- **Configurable Context**: `--context N` option now clearly documented for LLM analysis
+- **Full File Context**: LLM receives complete file content for superior merge decisions
+- **Clean Output**: Debug information only shown when `N2B_DEBUG=true` is set
+
+### 🧪 **Test Suite Improvements**
+- **Fixed Mocha Compatibility**: Resolved `reset_instance` method issues with newer Mocha versions
+- **Updated Test Expectations**: Fixed tests to match new formatting behavior
+- **Comprehensive Coverage**: All core functionality thoroughly tested and passing
+- **Namespace Fixes**: Corrected N2M → N2B namespace issues in LLM tests
+
+### 🔧 **Technical Improvements**
+- **Structured Data Handling**: Proper handling of analysis results in Jira integration
+- **Severity Classification**: Automatic categorization of issues as Critical vs Important
+- **Template Engine**: Enhanced support for complex data structures and formatting
+- **Error Recovery**: Robust handling of edge cases and malformed data
+
 ## [2.0.0] - 2024-07-20
 
 ### BREAKING CHANGES

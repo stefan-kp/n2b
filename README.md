@@ -38,7 +38,8 @@
 - **Custom Models**: Use fine-tuned models and custom deployments.
 
 ### 💻 **Development Workflow**
-- **AI Merge Conflict Resolution (via `n2b-diff`)**: Interactive merge conflict resolver.
+- **AI Merge Conflict Resolution (via `n2b-diff`)**: Interactive merge conflict resolver with HTML audit logs.
+- **HTML Merge Logs**: Beautiful 4-column audit trails with base/incoming/resolution/reasoning.
 - **Ruby Code Generation (IRB/Console)**: Generate Ruby code from natural language.
 - **VCS Integration**: Git and Mercurial support in `n2b-diff`.
 - **Errbit Integration (IRB/Console)**: Analyze errors and generate reports.
@@ -117,6 +118,41 @@ n2b-diff --analyze --jira PROJ-123 --update
 
 **Result**: Your Jira ticket (or GitHub issue) gets updated with a professional analysis comment showing implementation progress, technical insights, and compliance status.
 
+## 📊 **HTML Merge Logs - Professional Audit Trails**
+
+N2B now generates beautiful HTML merge logs that provide complete audit trails of your merge conflict resolutions:
+
+### ✨ **4-Column Layout**
+- **Base Branch Code**: The code from your target branch
+- **Incoming Branch Code**: The code from the branch being merged
+- **Final Resolution**: The actual resolved code that was chosen
+- **Resolution Details**: Method used, timestamps, and LLM reasoning
+
+### 🎨 **Professional Features**
+- **Color-Coded Sections**: Red for base, blue for incoming, green for resolution
+- **Method Badges**: Visual indicators for LLM vs Manual vs Skip vs Abort
+- **Statistics Dashboard**: Total conflicts, resolved count, success rates
+- **Responsive Design**: Works perfectly on desktop and mobile
+- **Browser-Ready**: Open directly in any web browser
+
+### 📋 **Perfect for Teams**
+- **Code Reviews**: Share merge decisions with your team
+- **Compliance**: Complete audit trail for regulated environments
+- **Learning**: See how AI suggestions compare to manual choices
+- **Debugging**: Understand why conflicts were resolved specific ways
+
+### 🚀 **Usage**
+```bash
+# Enable merge logging in config (if not already enabled)
+n2b -c
+
+# Resolve conflicts - HTML log automatically generated
+n2b-diff conflicted_file.rb
+
+# Find your logs
+open .n2b_merge_log/2025-01-08-143022.html
+```
+
 ## 🔍 **AI-Powered Code Analysis & Command Translation**
 
 N2B offers two primary commands for different aspects of your workflow:
@@ -143,7 +179,14 @@ N2B offers two primary commands for different aspects of your workflow:
    n2b-diff --analyze --jira PROJ-123 --requirements specs.md --update
    ```
 
-## 🆕 **What's New in v2.0 (Highlights)**
+## 🆕 **What's New in v2.0.1 (Latest)**
+* **📊 HTML Merge Logs**: Beautiful 4-column audit trails with professional styling and team collaboration features
+* **🎯 Enhanced Jira Integration**: Template-based formatting, collapsible sections, and clean professional comments
+* **🔧 Debug Environment**: `N2B_DEBUG=true` for detailed troubleshooting when needed
+* **⚡ Better Context Display**: Shows surrounding code context for better conflict understanding
+* **🧪 Robust Testing**: All core functionality thoroughly tested and passing
+
+## 🆕 **What's New in v2.0 (Major Release)**
 * **Command Restructuring**: `n2b` for command translation, `n2b-diff` for merge conflicts and all-new AI diff analysis. See [MIGRATION.md](MIGRATION.md).
 * **Custom Messages for Analysis**: Guide the AI's focus during diff analysis using the `-m/--message` option with `n2b-diff --analyze`.
 * **Enhanced `n2b-diff`**: Now the central hub for code analysis, supporting branches, requirements files, Jira/GitHub integration, and custom analysis instructions.
@@ -396,6 +439,20 @@ You can also set the history file location using the `N2B_HISTORY_FILE` environm
 ```bash
 export N2B_HISTORY_FILE=/path/to/your/history
 ```
+
+### Debug Mode
+
+For troubleshooting Jira integration or other issues, enable debug mode:
+```bash
+export N2B_DEBUG=true
+n2b-diff --analyze --jira PROJ-123 --update
+```
+
+This will show detailed information about:
+- Template content generation
+- API request/response details
+- ADF structure for Jira comments
+- Error diagnostics
 
 ### Custom Prompt Templates
 
