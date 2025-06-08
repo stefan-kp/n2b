@@ -10,10 +10,12 @@ class MergeCLITest < Minitest::Test
     FileUtils.mkdir_p(@tmp_dir)
     @file_path = File.join(@tmp_dir, 'conflict.txt')
     @config = { 'llm' => 'openai', 'merge_log_enabled' => false }
+    N2B::MergeCLI.any_instance.stubs(:get_config).returns(@config)
   end
 
   def teardown
     FileUtils.rm_rf(@tmp_dir)
+    N2B::MergeCLI.any_instance.unstub(:get_config)
   end
 
   def write(content)
@@ -100,4 +102,15 @@ class MergeCLITest < Minitest::Test
     refute result[:success]
     assert_includes result[:error], "timed out"
   end
+
+  def test_message_option_parsing
+    options = N2B::MergeCLI.new(['--message', 'focus']).instance_variable_get(:@options)
+    assert_equal 'focus', options[:message]
+  end
+
+  def test_message_sanitization
+    options = N2B::MergeCLI.new(['--message', "hello\nworld"]).instance_variable_get(:@options)
+    assert_equal 'hello world', options[:message]
+  end
 end
+

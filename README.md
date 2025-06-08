@@ -51,14 +51,20 @@
 
 ```bash
 # Analyze your current changes
-n2b --diff
+
+n2b-diff --analyze
 
 # Compare against main branch with requirements checking
-n2b --diff --branch main --requirements requirements.md
+n2b-diff --analyze --branch main --requirements requirements.md
 
 # Full workflow with Jira integration
-n2b --diff --jira PROJ-123 --jira-update
+n2b-diff --analyze --jira PROJ-123 --update
+
+# Custom focus example
+n2b-diff --analyze -m "Focus on security vulnerabilities"
 ```
+
+The `--message` text is sanitized and limited to 500 characters to prevent prompt injection.
 
 ### 💬 **We Want Your Feedback!**
 
@@ -999,3 +1005,4 @@ The generated tickets include:
 - Story point estimate
 - Priority level
 - Reference to the original Errbit URL
+
