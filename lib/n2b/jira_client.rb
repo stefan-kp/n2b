@@ -71,19 +71,41 @@ module N2B
       # Generate comment using template system
       template_comment = generate_templated_comment(comment)
 
+      if debug_mode?
+        puts "🔍 DEBUG: Generated template comment (#{template_comment.length} chars):"
+        puts "--- TEMPLATE COMMENT START ---"
+        puts template_comment
+        puts "--- TEMPLATE COMMENT END ---"
+      end
+
       # Prepare the comment body in Jira's Atlassian Document Format (ADF)
       comment_body = {
         "body" => format_comment_as_adf(template_comment)
       }
 
+      if debug_mode?
+        puts "🔍 DEBUG: Formatted ADF comment body:"
+        puts "--- ADF BODY START ---"
+        puts JSON.pretty_generate(comment_body)
+        puts "--- ADF BODY END ---"
+      end
+
       # Make the API call to add a comment
       path = "/rest/api/3/issue/#{ticket_key}/comment"
+      puts "🔍 DEBUG: Making API request to: #{path}" if debug_mode?
+
       _response = make_api_request('POST', path, comment_body)
 
       puts "✅ Successfully added comment to Jira ticket #{ticket_key}"
       true
     rescue JiraApiError => e
       puts "❌ Failed to update Jira ticket #{ticket_key}: #{e.message}"
+      if debug_mode?
+        puts "🔍 DEBUG: Full error details:"
+        puts "  - Ticket key: #{ticket_key}"
+        puts "  - Template comment length: #{template_comment&.length || 'nil'}"
+        puts "  - Comment body keys: #{comment_body&.keys || 'nil'}"
+      end
       false
     end
 
@@ -401,6 +423,11 @@ module N2B
     end
 
     def generate_templated_comment(comment_data)
+      # Handle structured hash data from format_analysis_for_jira
+      if comment_data.is_a?(Hash) && comment_data.key?(:implementation_summary)
+        return generate_structured_comment(comment_data)
+      end
+
       # Prepare template data from the analysis results
       template_data = prepare_template_data(comment_data)
 
@@ -411,6 +438,110 @@ module N2B
 
       engine = N2B::TemplateEngine.new(template_content, template_data)
       engine.render
+    end
+
+    def generate_structured_comment(data)
+      # Generate a properly formatted comment from structured analysis data
+      git_info = extract_git_info
+      timestamp = Time.now.strftime("%Y-%m-%d %H:%M UTC")
+
+      comment_parts = []
+
+      # Header
+      comment_parts << "*N2B Code Analysis Report*"
+      comment_parts << ""
+
+      # Implementation Summary (always expanded)
+      comment_parts << "*Implementation Summary:*"
+      comment_parts << (data[:implementation_summary] || "Unknown")
+      comment_parts << ""
+
+      # Custom message if provided (also expanded)
+      if data[:custom_analysis_focus] && !data[:custom_analysis_focus].empty?
+        comment_parts << "*Custom Analysis Focus:*"
+        comment_parts << data[:custom_analysis_focus]
+        comment_parts << ""
+      end
+
+      comment_parts << "---"
+      comment_parts << ""
+
+      # Automated Analysis Findings
+      comment_parts << "*Automated Analysis Findings:*"
+      comment_parts << ""
+
+      # Critical Issues (collapsed by default)
+      critical_issues = classify_issues_by_severity(data[:issues] || [], 'CRITICAL')
+      if critical_issues.any?
+        comment_parts << "{expand:🚨 Critical Issues (Must Fix Before Merge)}"
+        critical_issues.each { |issue| comment_parts << "☐ #{issue}" }
+        comment_parts << "{expand}"
+      else
+        comment_parts << "✅ No critical issues found"
+      end
+      comment_parts << ""
+
+      # Important Issues (collapsed by default)
+      important_issues = classify_issues_by_severity(data[:issues] || [], 'IMPORTANT')
+      if important_issues.any?
+        comment_parts << "{expand:⚠️ Important Issues (Should Address)}"
+        important_issues.each { |issue| comment_parts << "☐ #{issue}" }
+        comment_parts << "{expand}"
+      else
+        comment_parts << "✅ No important issues found"
+      end
+      comment_parts << ""
+
+      # Suggested Improvements (collapsed by default)
+      if data[:improvements] && data[:improvements].any?
+        comment_parts << "{expand:💡 Suggested Improvements (Nice to Have)}"
+        data[:improvements].each { |improvement| comment_parts << "☐ #{improvement}" }
+        comment_parts << "{expand}"
+      else
+        comment_parts << "✅ No specific improvements suggested"
+      end
+      comment_parts << ""
+
+      # Test Coverage Assessment
+      comment_parts << "{expand:🧪 Test Coverage Assessment}"
+      if data[:test_coverage] && !data[:test_coverage].empty?
+        comment_parts << "*Overall Assessment:* #{data[:test_coverage]}"
+      else
+        comment_parts << "*Overall Assessment:* Not assessed"
+      end
+      comment_parts << "{expand}"
+      comment_parts << ""
+
+      # Missing Test Coverage
+      comment_parts << "*Missing Test Coverage:*"
+      comment_parts << "☐ No specific missing tests identified"
+      comment_parts << ""
+
+      # Requirements Evaluation
+      comment_parts << "*📋 Requirements Evaluation:*"
+      if data[:requirements_evaluation] && !data[:requirements_evaluation].empty?
+        comment_parts << "#{data[:requirements_evaluation]}"
+      else
+        comment_parts << "🔍 *UNCLEAR:* Requirements not provided or assessed"
+      end
+      comment_parts << ""
+
+      comment_parts << "---"
+      comment_parts << ""
+
+      # Footer with metadata (simplified)
+      comment_parts << "Analysis completed on #{timestamp} | Branch: #{git_info[:branch]}"
+
+      comment_parts.join("\n")
+    end
+
+    def classify_issues_by_severity(issues, target_severity)
+      return [] unless issues.is_a?(Array)
+
+      issues.select do |issue|
+        severity = classify_error_severity(issue)
+        severity == target_severity
+      end
     end
 
     def prepare_template_data(comment_data)
@@ -651,6 +782,8 @@ module N2B
       content = []
       lines = markdown_text.split("\n")
       current_paragraph = []
+      current_expand = nil
+      expand_content = []
 
       lines.each do |line|
         case line
@@ -681,75 +814,118 @@ module N2B
             current_paragraph = []
           end
 
-          # Create expand section
+          # Start collecting expand content
           expand_title = $1.strip
-          content << {
+          current_expand = {
             "type" => "expand",
             "attrs" => { "title" => expand_title },
             "content" => []
           }
+          expand_content = []
         when /^\{expand\}$/  # Jira expand end
-          # End of expand section - handled by the expand start
+          # End of expand section - add collected content
+          if current_expand
+            current_expand["content"] = expand_content
+            content << current_expand if expand_content.any?  # Only add if has content
+            current_expand = nil
+            expand_content = []
+          end
         when /^☐\s+(.+)$/  # Unchecked checkbox
           # Flush current paragraph
           if current_paragraph.any?
-            content << create_paragraph(current_paragraph.join(" "))
+            paragraph = create_paragraph(current_paragraph.join(" "))
+            if current_expand
+              expand_content << paragraph
+            else
+              content << paragraph
+            end
             current_paragraph = []
           end
 
-          content << {
-            "type" => "taskList",
-            "content" => [
-              {
-                "type" => "taskItem",
-                "attrs" => { "state" => "TODO" },
-                "content" => [
-                  create_paragraph($1.strip)
-                ]
-              }
-            ]
-          }
+          # Convert checkbox to simple paragraph (no bullet points)
+          checkbox_paragraph = create_paragraph("☐ " + $1.strip)
+
+          if current_expand
+            expand_content << checkbox_paragraph
+          else
+            content << checkbox_paragraph
+          end
         when /^☑\s+(.+)$/  # Checked checkbox
           # Flush current paragraph
           if current_paragraph.any?
-            content << create_paragraph(current_paragraph.join(" "))
+            paragraph = create_paragraph(current_paragraph.join(" "))
+            if current_expand
+              expand_content << paragraph
+            else
+              content << paragraph
+            end
             current_paragraph = []
           end
 
-          content << {
-            "type" => "taskList",
-            "content" => [
-              {
-                "type" => "taskItem",
-                "attrs" => { "state" => "DONE" },
-                "content" => [
-                  create_paragraph($1.strip)
-                ]
-              }
-            ]
-          }
+          # Convert checkbox to simple paragraph (no bullet points)
+          checkbox_paragraph = create_paragraph("☑ " + $1.strip)
+
+          if current_expand
+            expand_content << checkbox_paragraph
+          else
+            content << checkbox_paragraph
+          end
         when /^---$/  # Horizontal rule
           # Flush current paragraph
           if current_paragraph.any?
-            content << create_paragraph(current_paragraph.join(" "))
+            paragraph = create_paragraph(current_paragraph.join(" "))
+            if current_expand
+              expand_content << paragraph
+            else
+              content << paragraph
+            end
             current_paragraph = []
           end
 
-          content << { "type" => "rule" }
+          rule = { "type" => "rule" }
+          if current_expand
+            expand_content << rule
+          else
+            content << rule
+          end
         when ""  # Empty line
           # Flush current paragraph
           if current_paragraph.any?
-            content << create_paragraph(current_paragraph.join(" "))
+            paragraph = create_paragraph(current_paragraph.join(" "))
+            if current_expand
+              expand_content << paragraph
+            else
+              content << paragraph
+            end
             current_paragraph = []
           end
         else  # Regular text
-          current_paragraph << line
+          # Skip empty or whitespace-only content
+          unless line.strip.empty? || line.strip == "{}"
+            current_paragraph << line
+          end
         end
       end
 
       # Flush any remaining paragraph
       if current_paragraph.any?
-        content << create_paragraph(current_paragraph.join(" "))
+        paragraph = create_paragraph(current_paragraph.join(" "))
+        if current_expand
+          expand_content << paragraph
+        else
+          content << paragraph
+        end
+      end
+
+      # Close any remaining expand section
+      if current_expand && expand_content.any?
+        current_expand["content"] = expand_content
+        content << current_expand
+      end
+
+      # Ensure we have at least one content element
+      if content.empty?
+        content << create_paragraph("Analysis completed.")
       end
 
       {
@@ -772,6 +948,10 @@ module N2B
     end
 
     private
+
+    def debug_mode?
+      ENV['N2B_DEBUG'] == 'true'
+    end
 
     def format_comment_as_adf(comment_data)
       # If comment_data is a string (from template), convert to simple ADF
@@ -1097,7 +1277,25 @@ module N2B
       request['Content-Type'] = 'application/json'
       request['Accept'] = 'application/json'
 
+      if debug_mode?
+        puts "🔍 DEBUG: Making #{method} request to: #{full_url}"
+        puts "🔍 DEBUG: Request headers: Content-Type=#{request['Content-Type']}, Accept=#{request['Accept']}"
+        if body
+          puts "🔍 DEBUG: Request body size: #{body.to_json.length} bytes"
+          puts "🔍 DEBUG: Request body preview: #{body.to_json[0..500]}#{'...' if body.to_json.length > 500}"
+        end
+      end
+
       response = http.request(request)
+
+      if debug_mode?
+        puts "🔍 DEBUG: Response code: #{response.code} #{response.message}"
+        if response.body && !response.body.empty?
+          # Force UTF-8 encoding to handle character encoding issues
+          response_body = response.body.force_encoding('UTF-8')
+          puts "🔍 DEBUG: Response body: #{response_body}"
+        end
+      end
 
       unless response.is_a?(Net::HTTPSuccess)
         error_message = "Jira API Error: #{response.code} #{response.message}"

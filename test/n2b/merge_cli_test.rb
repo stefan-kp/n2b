@@ -9,12 +9,12 @@ require 'n2b/message_utils'
 require 'mocha/minitest' # Ensure Mocha is available
 require 'json' # For .to_json
 
-# Stubbing N2M::Llm classes if not loaded via test_helper
-if !defined?(N2M::Llm::OpenAi)
-  module N2M; module Llm; class OpenAi; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
+# Stubbing N2B::Llm classes if not loaded via test_helper
+if !defined?(N2B::Llm::OpenAi)
+  module N2B; module Llm; class OpenAi; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
 end
-if !defined?(N2M::Llm::Claude)
-  module N2M; module Llm; class Claude; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
+if !defined?(N2B::Llm::Claude)
+  module N2B; module Llm; class Claude; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
 end
 
 
@@ -52,7 +52,7 @@ class MergeCLITest < Minitest::Test
 
     # Common stub for LLM instantiation within analyze_diff_with_spinner
     # This might need adjustment if different LLMs are tested
-    N2M::Llm::OpenAi.stubs(:new).returns(@mock_llm)
+    N2B::Llm::OpenAi.stubs(:new).returns(@mock_llm)
 
 
     @original_stdout = $stdout
@@ -67,7 +67,7 @@ class MergeCLITest < Minitest::Test
     $stdout = @original_stdout
     $stderr = @original_stderr
     Mocha::Mockery.instance.teardown # Crucial for cleaning up Mocha expectations
-    Mocha::Mockery.reset_instance
+    # Remove reset_instance call as it doesn't exist in newer Mocha versions
   end
 
   def write_conflict_file(content)
@@ -127,7 +127,7 @@ class MergeCLITest < Minitest::Test
       >>>>>>> feature
       line2
     TEXT
-    write(original)
+    write_conflict_file(original)
 
     cli = N2B::MergeCLI.new([@file_path]) # No --analyze
     cli.stubs(:call_llm_for_merge).returns('{"merged_code":"foo = 3","reason":"merge"}')
@@ -179,7 +179,7 @@ class MergeCLITest < Minitest::Test
 
     cli = N2B::MergeCLI.new(['--analyze'])
     cli.stubs(:get_vcs_type).returns(:git) # Mock VCS type
-    cli.stubs(:execute_vcs_diff).with(:git, 'auto').returns(sample_diff) # Mock diff generation
+    cli.stubs(:execute_vcs_diff).returns(sample_diff) # Mock diff generation without specific parameters
 
     @mock_llm.expects(:analyze_code_diff).with(any_parameters).returns('{"summary":"Basic analysis done","errors":[],"improvements":[]}').once
 

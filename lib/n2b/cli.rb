@@ -313,19 +313,19 @@ REQUIREMENTS_BLOCK
         llm_service_name = config['llm']
         llm = case llm_service_name
               when 'openai'
-                N2M::Llm::OpenAi.new(config)
+                N2B::Llm::OpenAi.new(config)
               when 'claude'
-                N2M::Llm::Claude.new(config)
+                N2B::Llm::Claude.new(config)
               when 'gemini'
-                N2M::Llm::Gemini.new(config)
+                N2B::Llm::Gemini.new(config)
               when 'openrouter'
-                N2M::Llm::OpenRouter.new(config)
+                N2B::Llm::OpenRouter.new(config)
               when 'ollama'
-                N2M::Llm::Ollama.new(config)
+                N2B::Llm::Ollama.new(config)
               else
                 # Fallback or error, though config validation should prevent this
                 puts "Warning: Unsupported LLM service '#{llm_service_name}' configured. Falling back to Claude."
-                N2M::Llm::Claude.new(config)
+                N2B::Llm::Claude.new(config)
               end
 
         # This content is specific to bash command generation

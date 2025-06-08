@@ -2,12 +2,12 @@ require_relative 'test_helper'
 require_relative '../../../lib/n2b/llm/claude'
 require_relative '../../../lib/n2b/errors'
 
-module N2M
+module N2B
   module Llm
     class ClaudeTest < Minitest::Test
       def setup
         @config = { 'access_key' => 'test_key', 'model' => 'claude-3-opus' }
-        @client = Claude.new(@config)
+        @client = N2B::Llm::Claude.new(@config)
       end
 
       def test_make_request_parses_json_without_response_format

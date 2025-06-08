@@ -60,7 +60,14 @@ module N2B
           base_content: block.base_content,
           incoming_content: block.incoming_content,
           base_label: block.base_label,
-          incoming_label: block.incoming_label
+          incoming_label: block.incoming_label,
+          start_line: block.start_line,
+          end_line: block.end_line,
+          resolved_content: result[:merged_code],
+          llm_suggestion: result[:reason],
+          resolution_method: determine_resolution_method(result),
+          action: determine_action(result),
+          timestamp: Time.now.strftime('%Y-%m-%d %H:%M:%S UTC')
         })
         if result[:abort]
           aborted = true
@@ -100,9 +107,11 @@ module N2B
         dir = '.n2b_merge_log'
         FileUtils.mkdir_p(dir)
         timestamp = Time.now.strftime('%Y-%m-%d-%H%M%S')
-        log_path = File.join(dir, "#{timestamp}.json")
-        File.write(log_path, JSON.pretty_generate({file: @file_path, timestamp: Time.now, entries: log_entries}))
+        log_path = File.join(dir, "#{timestamp}.html")
+        html_content = generate_merge_log_html(log_entries, timestamp)
+        File.write(log_path, html_content)
         puts "#{COLOR_GRAY}📝 Merge log saved to #{log_path}#{COLOR_RESET}"
+      end
       end
     end
 
@@ -123,7 +132,7 @@ module N2B
         opts.banner = "Usage: n2b-diff FILE [options] OR n2b-diff --analyze [options]"
         opts.separator ""
         opts.separator "Merge Conflict Options:"
-        opts.on('--context N', Integer, 'Context lines for merge conflict (default: 10)') { |v| options[:context_lines] = v }
+        opts.on('--context N', Integer, 'Context lines for merge conflict analysis (default: 10, affects LLM context)') { |v| options[:context_lines] = v }
 
         opts.separator ""
         opts.separator "Diff Analysis Options:"
@@ -826,11 +835,11 @@ REQUIREMENTS_BLOCK
     def analyze_diff_with_spinner(config) # Takes config to initialize LLM
       llm_service_name = config['llm']
       llm = case llm_service_name # Initialize LLM based on config
-            when 'openai' then N2M::Llm::OpenAi.new(config)
-            when 'claude' then N2M::Llm::Claude.new(config)
-            when 'gemini' then N2M::Llm::Gemini.new(config)
-            when 'openrouter' then N2M::Llm::OpenRouter.new(config)
-            when 'ollama' then N2M::Llm::Ollama.new(config)
+            when 'openai' then N2B::Llm::OpenAi.new(config)
+            when 'claude' then N2B::Llm::Claude.new(config)
+            when 'gemini' then N2B::Llm::Gemini.new(config)
+            when 'openrouter' then N2B::Llm::OpenRouter.new(config)
+            when 'ollama' then N2B::Llm::Ollama.new(config)
             else raise N2B::Error, "Unsupported LLM service for analysis: #{llm_service_name}"
             end
 
@@ -998,15 +1007,15 @@ REQUIREMENTS_BLOCK
       llm_service_name = config['llm']
       llm = case llm_service_name
             when 'openai'
-              N2M::Llm::OpenAi.new(config)
+              N2B::Llm::OpenAi.new(config)
             when 'claude'
-              N2M::Llm::Claude.new(config)
+              N2B::Llm::Claude.new(config)
             when 'gemini'
-              N2M::Llm::Gemini.new(config)
+              N2B::Llm::Gemini.new(config)
             when 'openrouter'
-              N2M::Llm::OpenRouter.new(config)
+              N2B::Llm::OpenRouter.new(config)
             when 'ollama'
-              N2M::Llm::Ollama.new(config)
+              N2B::Llm::Ollama.new(config)
             else
               raise N2B::Error, "Unsupported LLM service: #{llm_service_name}"
             end
@@ -1174,11 +1183,25 @@ REQUIREMENTS_BLOCK
     end
 
     def print_conflict(block)
+      # Show context before conflict for better understanding
+      if block.context_before && !block.context_before.empty?
+        puts "#{COLOR_GRAY}... context before ...#{COLOR_RESET}"
+        context_lines = block.context_before.split("\n").last(3) # Show last 3 lines of context
+        context_lines.each { |line| puts "#{COLOR_GRAY}#{line}#{COLOR_RESET}" }
+      end
+
       puts "#{COLOR_RED}<<<<<<< #{block.base_label} (lines #{block.start_line}-#{block.end_line})#{COLOR_RESET}"
       puts "#{COLOR_RED}#{block.base_content}#{COLOR_RESET}"
       puts "#{COLOR_YELLOW}=======#{COLOR_RESET}"
       puts "#{COLOR_GREEN}#{block.incoming_content}#{COLOR_RESET}"
       puts "#{COLOR_YELLOW}>>>>>>> #{block.incoming_label}#{COLOR_RESET}"
+
+      # Show context after conflict for better understanding
+      if block.context_after && !block.context_after.empty?
+        context_lines = block.context_after.split("\n").first(3) # Show first 3 lines of context
+        context_lines.each { |line| puts "#{COLOR_GRAY}#{line}#{COLOR_RESET}" }
+        puts "#{COLOR_GRAY}... context after ...#{COLOR_RESET}"
+      end
     end
 
     def print_suggestion(sug)
@@ -1473,6 +1496,236 @@ REQUIREMENTS_BLOCK
       rescue => e
         puts "#{COLOR_GRAY}⚠️  Could not save debug info: #{e.message}#{COLOR_RESET}"
       end
+    end
+
+    def generate_merge_log_html(log_entries, timestamp)
+      git_info = extract_git_info
+
+      html = <<~HTML
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>N2B Merge Log - #{@file_path} - #{timestamp}</title>
+          <style>
+            body {
+              font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+              margin: 0;
+              padding: 20px;
+              background-color: #f8f9fa;
+              color: #333;
+              line-height: 1.6;
+            }
+            .header {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 20px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header h1 {
+              margin: 0 0 10px 0;
+              font-size: 24px;
+            }
+            .header .meta {
+              opacity: 0.9;
+              font-size: 14px;
+            }
+            .conflict-container {
+              background: white;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+              overflow: hidden;
+            }
+            .conflict-header {
+              background-color: #e9ecef;
+              padding: 15px;
+              border-bottom: 1px solid #dee2e6;
+              font-weight: bold;
+              color: #495057;
+            }
+            .conflict-table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .conflict-table th {
+              background-color: #f8f9fa;
+              padding: 12px;
+              text-align: left;
+              font-weight: 600;
+              border-bottom: 2px solid #dee2e6;
+              color: #495057;
+            }
+            .conflict-table td {
+              padding: 12px;
+              border-bottom: 1px solid #e9ecef;
+              vertical-align: top;
+            }
+            .code-block {
+              background-color: #f8f9fa;
+              border: 1px solid #e9ecef;
+              border-radius: 4px;
+              padding: 10px;
+              font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+              font-size: 13px;
+              white-space: pre-wrap;
+              overflow-x: auto;
+              max-height: 300px;
+              overflow-y: auto;
+            }
+            .base-code { border-left: 4px solid #dc3545; }
+            .incoming-code { border-left: 4px solid #007bff; }
+            .resolution-code { border-left: 4px solid #28a745; }
+            .method-badge {
+              display: inline-block;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: 500;
+              text-transform: uppercase;
+            }
+            .method-llm { background-color: #e3f2fd; color: #1976d2; }
+            .method-manual { background-color: #fff3e0; color: #f57c00; }
+            .method-skip { background-color: #fce4ec; color: #c2185b; }
+            .method-abort { background-color: #ffebee; color: #d32f2f; }
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              padding: 20px;
+              color: #6c757d;
+              font-size: 14px;
+            }
+            .stats {
+              display: flex;
+              gap: 20px;
+              margin-top: 10px;
+            }
+            .stat-item {
+              background: rgba(255, 255, 255, 0.2);
+              padding: 8px 12px;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🔀 N2B Merge Resolution Log</h1>
+            <div class="meta">
+              <strong>File:</strong> #{@file_path}<br>
+              <strong>Timestamp:</strong> #{Time.now.strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
+              <strong>Branch:</strong> #{git_info[:branch]}<br>
+              <strong>Total Conflicts:</strong> #{log_entries.length}
+            </div>
+            <div class="stats">
+              <div class="stat-item">
+                <strong>Resolved:</strong> #{log_entries.count { |e| e[:action] == 'accepted' }}
+              </div>
+              <div class="stat-item">
+                <strong>Skipped:</strong> #{log_entries.count { |e| e[:action] == 'skipped' }}
+              </div>
+              <div class="stat-item">
+                <strong>Aborted:</strong> #{log_entries.count { |e| e[:action] == 'aborted' }}
+              </div>
+            </div>
+          </div>
+      HTML
+
+      log_entries.each_with_index do |entry, index|
+        conflict_number = index + 1
+        method_class = case entry[:resolution_method]
+                      when /llm|ai|suggested/i then 'method-llm'
+                      when /manual|user|edit/i then 'method-manual'
+                      when /skip/i then 'method-skip'
+                      when /abort/i then 'method-abort'
+                      else 'method-llm'
+                      end
+
+        html += <<~CONFLICT_HTML
+          <div class="conflict-container">
+            <div class="conflict-header">
+              Conflict ##{conflict_number} - Lines #{entry[:start_line]}-#{entry[:end_line]}
+              <span class="method-badge #{method_class}">#{entry[:resolution_method]}</span>
+            </div>
+            <table class="conflict-table">
+              <thead>
+                <tr>
+                  <th style="width: 25%">Base Branch Code</th>
+                  <th style="width: 25%">Incoming Branch Code</th>
+                  <th style="width: 25%">Final Resolution</th>
+                  <th style="width: 25%">Resolution Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="code-block base-code">#{escape_html(entry[:base_content] || 'N/A')}</div>
+                  </td>
+                  <td>
+                    <div class="code-block incoming-code">#{escape_html(entry[:incoming_content] || 'N/A')}</div>
+                  </td>
+                  <td>
+                    <div class="code-block resolution-code">#{escape_html(entry[:resolved_content] || 'N/A')}</div>
+                  </td>
+                  <td>
+                    <div class="code-block">
+                      <strong>Method:</strong> #{escape_html(entry[:resolution_method])}<br>
+                      <strong>Action:</strong> #{escape_html(entry[:action])}<br>
+                      <strong>Time:</strong> #{entry[:timestamp]}<br><br>
+                      #{entry[:llm_suggestion] ? "<strong>LLM Analysis:</strong><br>#{escape_html(entry[:llm_suggestion])}" : ''}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        CONFLICT_HTML
+      end
+
+      html += <<~FOOTER_HTML
+          <div class="footer">
+            Generated by N2B v#{N2B::VERSION} - AI-Powered Merge Conflict Resolution<br>
+            <small>This log contains the complete history of merge conflict resolutions for audit and review purposes.</small>
+          </div>
+        </body>
+        </html>
+      FOOTER_HTML
+
+      html
+    end
+
+    def escape_html(text)
+      return '' if text.nil?
+      text.to_s
+          .gsub('&', '&amp;')
+          .gsub('<', '&lt;')
+          .gsub('>', '&gt;')
+          .gsub('"', '&quot;')
+          .gsub("'", '&#39;')
+    end
+
+    def extract_git_info
+      branch = `git rev-parse --abbrev-ref HEAD 2>/dev/null`.strip rescue 'unknown'
+      {
+        branch: branch.empty? ? 'unknown' : branch
+      }
+    end
+
+    def determine_resolution_method(result)
+      return 'Aborted' if result[:abort]
+      return 'Manual Edit' if result[:reason]&.include?('manually resolved')
+      return 'Manual Choice' if result[:reason]&.include?('Manually selected')
+      return 'Skipped' if !result[:accepted] && !result[:abort]
+      return 'LLM Suggestion' if result[:accepted] && result[:reason]
+      'Unknown'
+    end
+
+    def determine_action(result)
+      return 'aborted' if result[:abort]
+      return 'accepted' if result[:accepted]
+      return 'skipped'
     end
   end
 end
