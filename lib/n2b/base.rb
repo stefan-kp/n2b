@@ -180,6 +180,12 @@ module N2B
           config['privacy']['append_to_shell_history'] = config['append_to_shell_history']
         end
 
+        # Editor Configuration
+        config['editor'] ||= {}
+        config['editor']['command'] ||= nil # or 'nano', 'vi'
+        config['editor']['type'] ||= nil # 'text_editor' or 'diff_tool'
+        config['editor']['configured'] ||= false
+
         # Validate configuration before saving
         validation_errors = validate_config(config)
         if validation_errors.any?
@@ -206,11 +212,99 @@ module N2B
         current_append_setting = config.key?('append_to_shell_history') ? config['append_to_shell_history'] : false
         config['append_to_shell_history'] = current_append_setting
         config['privacy']['append_to_shell_history'] = config['privacy']['append_to_shell_history'] || current_append_setting
+
+        # Ensure editor config is initialized if missing (for older configs)
+        config['editor'] ||= {}
+        config['editor']['command'] ||= nil
+        config['editor']['type'] ||= nil
+        config['editor']['configured'] ||= false
       end
       config
     end
 
     private
+
+    def command_exists?(command)
+      # Check for Windows or Unix-like systems for the correct command
+      null_device = RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/ ? 'NUL' : '/dev/null'
+      system("which #{command} > #{null_device} 2>&1") || system("where #{command} > #{null_device} 2>&1")
+    end
+
+    def prompt_for_editor_config(config)
+      puts "\n--- Editor Configuration ---"
+      current_editor_command = config.dig('editor', 'command')
+      current_editor_type = config.dig('editor', 'type')
+      current_status = if current_editor_command
+                         "Current: #{current_editor_command} (#{current_editor_type || 'not set'})"
+                       else
+                         "Current: Not configured"
+                       end
+      puts current_status
+
+      known_editors = [
+        { name: 'nano', command: 'nano', description: 'Simple terminal editor', type: 'text_editor' },
+        { name: 'vim', command: 'vim', description: 'Powerful terminal editor', type: 'text_editor' },
+        { name: 'vi', command: 'vi', description: 'Standard Unix terminal editor', type: 'text_editor' },
+        { name: 'code', command: 'code', description: 'Visual Studio Code (requires "code" in PATH)', type: 'text_editor' },
+        { name: 'subl', command: 'subl', description: 'Sublime Text (requires "subl" in PATH)', type: 'text_editor' },
+        { name: 'meld', command: 'meld', description: 'Visual diff and merge tool', type: 'diff_tool' },
+        { name: 'kdiff3', command: 'kdiff3', description: 'Visual diff and merge tool (KDE)', type: 'diff_tool' },
+        { name: 'opendiff', command: 'opendiff', description: 'File comparison tool (macOS)', type: 'diff_tool' },
+        { name: 'vimdiff', command: 'vimdiff', description: 'Diff tool using Vim', type: 'diff_tool' }
+      ]
+
+      available_editors = known_editors.select { |editor| command_exists?(editor[:command]) }
+
+      if available_editors.empty?
+        puts "No standard editors detected automatically."
+      else
+        puts "Choose your preferred editor/diff tool:"
+        available_editors.each_with_index do |editor, index|
+          puts "#{index + 1}. #{editor[:name]} (#{editor[:description]})"
+        end
+        puts "#{available_editors.length + 1}. Custom (enter your own command)"
+        print "Enter choice (1-#{available_editors.length + 1}) or leave blank to skip: "
+      end
+
+      choice_input = $stdin.gets.chomp
+      return if choice_input.empty? && current_editor_command # Skip if already configured and user wants to skip
+
+      choice = choice_input.to_i
+
+      selected_editor = nil
+      custom_command = nil
+
+      if choice > 0 && choice <= available_editors.length
+        selected_editor = available_editors[choice - 1]
+        config['editor']['command'] = selected_editor[:command]
+        config['editor']['type'] = selected_editor[:type]
+        config['editor']['configured'] = true
+        puts "✓ Using #{selected_editor[:name]} as your editor/diff tool."
+      elsif choice == available_editors.length + 1 || (available_editors.empty? && !choice_input.empty?)
+        print "Enter custom editor command: "
+        custom_command = $stdin.gets.chomp
+        if custom_command.empty?
+          puts "No command entered. Editor configuration skipped."
+          return
+        end
+
+        print "Is this a 'text_editor' or a 'diff_tool'? (text_editor/diff_tool): "
+        custom_type = $stdin.gets.chomp.downcase
+        unless ['text_editor', 'diff_tool'].include?(custom_type)
+          puts "Invalid type. Defaulting to 'text_editor'."
+          custom_type = 'text_editor'
+        end
+        config['editor']['command'] = custom_command
+        config['editor']['type'] = custom_type
+        config['editor']['configured'] = true
+        puts "✓ Using custom command '#{custom_command}' (#{custom_type}) as your editor/diff tool."
+      else
+        puts "Invalid choice. Editor configuration skipped."
+        # Keep existing config if invalid choice, or clear if they wanted to change but failed?
+        # For now, just skipping and keeping whatever was there.
+        return
+      end
+    end
 
     def validate_config(config)
       errors = []
@@ -233,6 +327,12 @@ module N2B
       if config['llm'] != 'ollama' && (config['access_key'].nil? || config['access_key'].empty?)
         errors << "API key missing for #{config['llm']} provider"
       end
+
+      # Validate editor configuration (optional, so more like warnings or info)
+      # Example: Check if command is set if configured is true
+      # if config['editor'] && config['editor']['configured'] && (config['editor']['command'].nil? || config['editor']['command'].empty?)
+      #   errors << "Editor is marked as configured, but no command is set."
+      # end
 
       tracker = config['issue_tracker'] || 'none'
       case tracker

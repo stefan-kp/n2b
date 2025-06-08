@@ -472,6 +472,24 @@ When these paths are not provided, the built-in templates located in `lib/n2b/te
 - `diff_json_instruction.txt` - JSON formatting instructions for diff analysis
 - `merge_conflict_prompt.txt` - Merge conflict resolution prompt
 
+### Editor Configuration
+
+N2B allows you to configure your preferred text editor or visual diff tool for use with the `[e]` (Edit) option during merge conflict resolution. This can be set up during the advanced configuration flow (run `n2b --advanced-config` or `n2b -c` and choose to configure advanced settings).
+
+You will be prompted to choose from a list of auto-detected editors (like `nano`, `vim`, `code` - VS Code) and diff tools (like `meld`, `kdiff3`, `vimdiff`). You can also provide a custom command.
+
+The chosen editor is stored in your `~/.n2b/config.yml` file under the `editor` key:
+
+```yaml
+editor:
+  command: "meld"
+  type: "diff_tool" # Can be "text_editor" or "diff_tool"
+  configured: true
+```
+
+*   If a **text editor** is configured, the `[e]` option will open the conflicted file directly for manual editing using the specified editor command.
+*   If a **diff tool** is configured, N2B will prepare temporary files for the base, incoming, and current (LLM suggested) versions of the conflict and open them in your chosen 3-way merge tool. After you've used the tool, N2B will use the content from your successfully merged file.
+
 ## Quick Example N2B
 
 ```
@@ -830,9 +848,33 @@ For each conflict, you can:
 - **[y] Accept** - Apply the AI suggestion
 - **[n] Skip** - Keep the conflict as-is
 - **[c] Comment** - Add context to improve AI suggestions
+- **[s] Refresh Preview** - Regenerate the HTML preview with the latest suggestion
 - **[a] Abort** - Stop processing and keep file unchanged
 
 ### Features
+
+#### **🌐 3-Way HTML Conflict Preview**
+
+When resolving merge conflicts with `n2b-diff`, N2B now automatically generates a 3-way HTML preview of the conflict.
+
+*   **Automatic Opening**: The preview is automatically opened in your default web browser.
+*   **Terminal Link**: A clickable `file:///` link to the preview is also displayed in your terminal.
+    ```
+    🌐 Opening conflict preview in browser...
+    📁 Preview: file:///Users/user/.n2b_merge_log/conflict_preview_your_file.rb_20231027_103045.html
+
+    Actions: [y] Accept, [n] Skip, [c] Comment, [e] Edit, [s] Refresh Preview, [a] Abort
+    (Preview link above can be cmd/ctrl+clicked if your terminal supports it)
+    Your choice:
+    ```
+*   **Layout**: The preview features a three-column layout:
+    *   **Base Branch**: Content from the base branch (e.g., HEAD).
+    *   **Incoming Branch**: Content from the incoming branch (e.g., your feature branch).
+    *   **Current Resolution**: The current LLM suggestion or your edited version, showing how the conflict would be resolved.
+*   **Full File View**: Each column displays the *entire* file content, with the specific conflicting lines highlighted within their context. This allows for a comprehensive understanding of the changes.
+*   **Syntax Highlighting**: Code is professionally syntax-highlighted using Highlight.js for improved readability across various programming languages.
+*   **Dynamic Updates**: The preview is regenerated and reopened if the LLM suggestion changes (e.g., after you add a comment or use the `[e]` edit option and a new suggestion is fetched) or if you use the `[s]` (Refresh Preview) option.
+*   **Temporary Files**: Preview files are stored temporarily in the `.n2b_merge_log/` directory and are automatically cleaned up after the conflict is resolved or skipped for that particular block.
 
 #### **🎨 Colorized Display**
 - 🔴 **Red**: Base/HEAD content (`<<<<<<< HEAD`)

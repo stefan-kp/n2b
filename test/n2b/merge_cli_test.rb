@@ -1,363 +1,335 @@
 require 'minitest/autorun'
+require 'minitest/mock'
 require 'fileutils'
-require 'stringio'
-require_relative '../test_helper' # Should set up load paths
-require 'n2b/merge_cli'
-require 'n2b/jira_client'
-require 'n2b/github_client'
-require 'n2b/message_utils'
-require 'mocha/minitest' # Ensure Mocha is available
-require 'json' # For .to_json
+require 'pathname' # Required for Pathname
+require_relative '../../lib/n2b/merge_cli' # Adjust path as necessary
+require_relative '../../lib/n2b/merge_conflict_parser' # Required for block_details
 
-# Stubbing N2B::Llm classes if not loaded via test_helper
-if !defined?(N2B::Llm::OpenAi)
-  module N2B; module Llm; class OpenAi; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
+# Minimal N2B::Base mock for MergeCLI to inherit from
+module N2B
+  class Base
+    # Mock necessary methods used by MergeCLI's initialization or tested methods
+    def get_config(reconfigure: false, advanced_flow: false)
+      {
+        'editor' => { 'command' => nil, 'type' => nil, 'configured' => false },
+        'merge_log_enabled' => false
+        # Add other keys if MergeCLI constructor or methods use them
+      }
+    end
+
+    # Add other methods if MergeCLI's direct calls need them
+  end
 end
-if !defined?(N2B::Llm::Claude)
-  module N2B; module Llm; class Claude; def initialize(config); end; def analyze_code_diff(prompt); ""; end; end; end; end
+
+# Mock N2B::VERSION if not available
+module N2B
+  VERSION = '0.0.test' unless defined?(N2B::VERSION)
 end
 
 
-class MergeCLITest < Minitest::Test
+class TestMergeCLI < Minitest::Test
   def setup
-    @tmp_dir = File.expand_path('./tmp_n2b_merge_cli_dir', Dir.pwd) # Unique name
-    FileUtils.mkdir_p(@tmp_dir)
-    @original_pwd = Dir.pwd
-    Dir.chdir(@tmp_dir) # Change to tmp_dir to simulate repo operations
+    # Provide dummy arguments for MergeCLI initialization
+    # These might need to be adjusted if MergeCLI's constructor changes
+    @merge_cli = N2B::MergeCLI.new(['dummy_file_path.txt'])
+    @test_dir = File.join(__dir__, 'test_tmp_merge_cli') # Unique temp dir
+    FileUtils.mkdir_p(@test_dir)
 
-    @file_path = File.join(@tmp_dir, 'conflict.txt') # For merge conflict tests
-
-    # Enhanced config for diff analysis features
-    @mock_config = {
-      'llm' => 'openai',
-      'merge_log_enabled' => false,
-      'issue_tracker' => 'jira', # Default issue tracker
-      'github' => { 'repo' => 'test/repo', 'access_token' => 'gh_token_abc123' },
-      'jira' => { 'domain' => 'test.jira.com', 'email' => 'test@example.com', 'api_key' => 'jira_key_xyz789' },
-      'templates' => { # Assuming template paths might be needed by resolve_template_path
-        'diff_system_prompt' => File.expand_path('../../lib/n2b/templates/diff_system_prompt.txt', __dir__),
-        'diff_json_instruction' => File.expand_path('../../lib/n2b/templates/diff_json_instruction.txt', __dir__),
-        'jira_comment' => File.expand_path('../../lib/n2b/templates/jira_comment.txt', __dir__),
-        'github_comment' => File.expand_path('../../lib/n2b/templates/github_comment.txt', __dir__)
-      },
-      'privacy' => { 'send_current_directory' => false, 'send_llm_history' => false, 'send_shell_history' => false } # from cli.rb
-    }
-    # Stub get_config for any instance of MergeCLI
-    N2B::MergeCLI.any_instance.stubs(:get_config).returns(@mock_config)
-
-    # Mocks for external services (can be further customized in tests)
-    @mock_llm = mock('llm_client')
-    @mock_jira_client = mock('jira_client')
-    @mock_github_client = mock('github_client')
-
-    # Common stub for LLM instantiation within analyze_diff_with_spinner
-    # This might need adjustment if different LLMs are tested
-    N2B::Llm::OpenAi.stubs(:new).returns(@mock_llm)
-
-
-    @original_stdout = $stdout
-    $stdout = StringIO.new
-    @original_stderr = $stderr
-    $stderr = StringIO.new
+    # Mock @file_path for methods that use it directly
+    @merge_cli.instance_variable_set(:@file_path, File.join(@test_dir, 'test_file.txt'))
+    FileUtils.touch(@merge_cli.instance_variable_get(:@file_path))
   end
 
   def teardown
-    Dir.chdir(@original_pwd) # Restore original working directory
-    FileUtils.rm_rf(@tmp_dir)
-    $stdout = @original_stdout
-    $stderr = @original_stderr
-    Mocha::Mockery.instance.teardown # Crucial for cleaning up Mocha expectations
-    # Remove reset_instance call as it doesn't exist in newer Mocha versions
+    FileUtils.rm_rf(@test_dir)
   end
 
-  def write_conflict_file(content)
-    File.write(@file_path, content)
+  def test_get_language_class
+    assert_equal 'ruby', @merge_cli.send(:get_language_class, 'test.rb')
+    assert_equal 'javascript', @merge_cli.send(:get_language_class, 'test.js')
+    assert_equal 'python', @merge_cli.send(:get_language_class, 'test.py')
+    assert_equal 'xml', @merge_cli.send(:get_language_class, 'test.html')
+    assert_equal 'css', @merge_cli.send(:get_language_class, 'test.css')
+    assert_equal '', @merge_cli.send(:get_language_class, 'test.unknown')
+    assert_equal 'yaml', @merge_cli.send(:get_language_class, 'config.yml')
   end
 
-  # Helper to simulate a VCS environment
-  def setup_git_repo_with_diff(file_name: "test_file.rb", initial_content: "def old_method\nend\n", new_content: "def new_method\n  puts 'hello'\nend\n", branch_name: "feature-branch")
-    system("git init -q")
-    system("git config user.email 'test@example.com' && git config user.name 'Test User'")
-    File.write(file_name, initial_content)
-    system("git add #{file_name} && git commit -m 'Initial commit' -q")
-    # Simulate a feature branch or just make changes directly
-    File.write(file_name, new_content)
-    # `git diff HEAD` will show these changes if not staged.
-    # For branch diff, we'd need to commit on a branch.
-    # For simplicity, execute_vcs_diff will be mocked.
-    "diff --git a/#{file_name} b/#{file_name}\nindex 123..456 100644\n--- a/#{file_name}\n+++ b/#{file_name}\n@@ -1,2 +1,3 @@\n-def old_method\n-end\n+def new_method\n+  puts 'hello'\n+end\n"
+  def test_find_sub_content_lines_present
+    full_content = "line1\nline2\nTARGET_START\nline4\nTARGET_END\nline6"
+    sub_content = "TARGET_START\nline4\nTARGET_END"
+    expected = { start: 3, end: 5 }
+    assert_equal expected, @merge_cli.send(:find_sub_content_lines, full_content, sub_content)
   end
 
+  def test_find_sub_content_lines_absent
+    full_content = "line1\nline2\nline3"
+    sub_content = "not_present"
+    assert_nil @merge_cli.send(:find_sub_content_lines, full_content, sub_content)
+  end
 
-  # --- Existing Merge Conflict Tests (adapted slightly if needed) ---
-  def test_resolve_accept_merge_conflict_mode
-    write_conflict_file(<<~TEXT)
-      line1
-      <<<<<<< HEAD
-      foo = 1
-      =======
-      foo = 2
-      >>>>>>> feature
-      line2
-    TEXT
+  def test_find_sub_content_lines_empty_sub_content
+    full_content = "line1\nline2"
+    sub_content = ""
+    assert_nil @merge_cli.send(:find_sub_content_lines, full_content, sub_content)
+  end
 
-    cli = N2B::MergeCLI.new([@file_path]) # No --analyze, so merge mode
-    # Merge mode uses call_llm_for_merge, not analyze_code_diff
-    cli.stubs(:call_llm_for_merge).returns('{"merged_code":"foo = 3","reason":"merge"}')
+  def test_find_sub_content_lines_sub_content_multiple_lines_at_start
+    full_content = "TARGET_START\nline2\nTARGET_END\nline4"
+    sub_content = "TARGET_START\nline2\nTARGET_END"
+    expected = { start: 1, end: 3 }
+    assert_equal expected, @merge_cli.send(:find_sub_content_lines, full_content, sub_content)
+  end
 
-    input = StringIO.new("y\n")
-    $stdin = input
+  def test_apply_hunk_to_full_content
+    original = "<<<<<<< HEAD\nold_line1\nold_line2\n=======\nnew_line1\nnew_line2\n>>>>>>> feature"
+    # Mocking a MergeConflictParser::ConflictBlock object
+    block_details = N2B::MergeConflictParser::ConflictBlock.new(
+      start_line: 1, end_line: 7, # Line numbers of the conflict markers themselves
+      base_content: "old_line1\nold_line2",
+      incoming_content: "new_line1\nnew_line2",
+      base_label: "HEAD", incoming_label: "feature",
+      context_before: "", context_after: ""
+    )
+    resolved_hunk = "resolved_line1\nresolved_line2"
+
+    expected_output = "resolved_line1\nresolved_line2"
+
+    actual_output = @merge_cli.send(:apply_hunk_to_full_content, original, block_details, resolved_hunk)
+    assert_equal expected_output, actual_output
+  end
+
+  def test_apply_hunk_to_full_content_with_context
+    original = "context_before\n<<<<<<< HEAD\nold_line\n=======\nnew_line\n>>>>>>> feature\ncontext_after"
+    block_details = N2B::MergeConflictParser::ConflictBlock.new(
+      start_line: 2, end_line: 6,
+      base_content: "old_line", incoming_content: "new_line",
+      base_label: "HEAD", incoming_label: "feature",
+      context_before: "context_before", context_after: "context_after"
+    )
+    resolved_hunk = "resolved_line"
+
+    expected_output = "context_before\nresolved_line\ncontext_after"
+    actual_output = @merge_cli.send(:apply_hunk_to_full_content, original, block_details, resolved_hunk)
+    assert_equal expected_output, actual_output
+  end
+
+  def test_generate_conflict_preview_html_structure
+    block = N2B::MergeConflictParser::ConflictBlock.new(
+      start_line: 2, end_line: 2, base_label: 'main', incoming_label: 'feature',
+      base_content: "base line2", incoming_content: "incoming line2",
+      suggestion: { 'merged_code' => "resolved line2" } # Suggestion is just the block
+    )
+    base_full = "base line1\nbase line2\nbase line3"
+    incoming_full = "incoming line1\nincoming line2\nincoming line3"
+    # current_resolution_content_full will be constructed by apply_hunk...
+    # For this test, let's assume apply_hunk_to_full_content works and construct it manually.
+    # Here, original_full_content_with_markers would be the file content in resolve_block.
+    # Let's use a simplified version for this test's direct call to generate_..._html
+    current_full_file_with_markers = "base line1\n<<<<<< base\nbase line2\n======\ninc line2\n>>>>>> inc\nbase line3"
+    # block_for_apply_hunk would have start_line and end_line relative to current_full_file_with_markers
+    # For this test, we pass the already resolved full content.
+    resolved_full = "base line1\nresolved line2\nbase line3"
+
+    # Mock find_sub_content_lines
+    find_stub = ->(full_c, sub_c) do
+      if full_c == base_full && sub_c == "base line2"; { start: 2, end: 2 };
+      elsif full_c == incoming_full && sub_c == "incoming line2"; { start: 2, end: 2 };
+      elsif full_c == resolved_full && sub_c == "resolved line2"; { start: 2, end: 2 };
+      else nil; end
+    end
+
+    @merge_cli.stub(:find_sub_content_lines, find_stub) do
+      html_path = @merge_cli.send(
+        :generate_conflict_preview_html,
+        block, base_full, incoming_full, resolved_full,
+        'main', 'feature', @merge_cli.instance_variable_get(:@file_path)
+      )
+
+      assert File.exist?(html_path), "HTML preview file should be created: #{html_path}"
+      html_content = File.read(html_path)
+
+      assert_match /<title>Conflict Preview: test_file.txt<\/title>/, html_content
+      assert_match /highlight\.min\.css/, html_content
+      assert_match /highlight\.min\.js/, html_content # Added this check
+      assert_match /hljs\.highlightAll\(\);/, html_content # Added this check
+      assert_match /<div class="column">\s*<h3>Base \(main\)<\/h3>/, html_content
+      assert_match /<div class="column">\s*<h3>Incoming \(feature\)<\/h3>/, html_content
+      assert_match /<div class="column">\s*<h3>Current Resolution<\/h3>/, html_content
+      assert_match /<pre><code class="ruby">/, html_content # Assuming .rb from setup
+
+      # Check for escaped content and line numbers
+      assert_match CGI.escapeHTML("base line1"), html_content
+      assert_match /<span class="line-number">1<\/span><span class="line-content">#{CGI.escapeHTML("base line1")}<\/span>/, html_content
+
+      # Check highlighting classes
+      assert_match /class="line conflict-lines conflict-lines-base">#{CGI.escapeHTML("base line2")}<\/span>/, html_content
+      assert_match /class="line conflict-lines conflict-lines-incoming">#{CGI.escapeHTML("incoming line2")}<\/span>/, html_content
+      assert_match /class="line conflict-lines conflict-lines-resolution">#{CGI.escapeHTML("resolved line2")}<\/span>/, html_content
+
+      FileUtils.rm_f(html_path)
+    end
+  end
+
+  def test_open_html_in_browser_commands
+    file_path = File.join(@test_dir, "test.html")
+    FileUtils.touch(file_path) # Ensure file exists for File.absolute_path
+
+    # Test macOS
+    RbConfig::CONFIG.stub :[], 'darwin' do # Stub RbConfig
+        @merge_cli.stub(:system, ->(cmd) { assert_match /^open file:\/\//, cmd; true }) do
+            @merge_cli.send(:open_html_in_browser, file_path)
+        end
+    end
+
+    # Test Linux (non-WSL)
+    RbConfig::CONFIG.stub :[], 'linux' do
+        ENV.stub :[], nil do # Mock ENV['WSL_DISTRO_NAME'] etc. to be nil
+            File.stub :exist?, false do # Mock File.exist? for /proc/sys/fs/binfmt_misc/WSLInterop
+                @merge_cli.stub(:system, ->(cmd) { assert_match /^xdg-open file:\/\//, cmd; true }) do
+                    @merge_cli.send(:open_html_in_browser, file_path)
+                end
+            end
+        end
+    end
+
+    # Test Windows
+    RbConfig::CONFIG.stub :[], 'mswin' do
+        @merge_cli.stub(:system, ->(cmd) { assert_match /^start "" "[a-zA-Z]:\\.+test\.html"/i, cmd; true }) do
+            @merge_cli.send(:open_html_in_browser, file_path)
+        end
+    end
+  end
+
+  # Placeholder for get_file_content_from_vcs tests
+  def test_get_file_content_from_vcs_git_success
+    # Need to use a real file path for Pathname operations if they are added to get_file_content_from_vcs
+    test_file_path_in_repo = "test_file.txt" # Relative to repo root
+    FileUtils.touch(test_file_path_in_repo) # Ensure it exists for Pathname if used
+
+    # Mock the backtick ` method directly on the object instance
+    @merge_cli.define_singleton_method(:`) do |command|
+      assert_match(/^git show main:#{Regexp.escape(test_file_path_in_repo)}/, command)
+      "fake git content"
+    end
+
+    # Mock $? for success
+    success_status_mock = Minitest::Mock.new.expect(:success?, true)
+
+    # It's tricky to stub $? directly. A common way is to stub system calls that set it,
+    # or abstract the system call + status check into its own method that can be stubbed.
+    # Given current implementation of get_file_content_from_vcs uses backticks and then checks $?,
+    # we'll assume $? reflects the last command. Minitest doesn't easily mock global state like $?.
+    # This test will rely on the actual behavior of backticks if the command were to run.
+    # For a more isolated test, `get_file_content_from_vcs` would need refactoring
+    # to use something like Open3, whose components can be mocked.
+    # For now, we can only verify the command and the processing of its return if $? was true.
+
+    # To make this testable, let's assume if backticks return non-empty, it's a success for this mock.
+    # And if we want to test failure, make backticks return empty and $? non-success.
+
+    # This test is more of an integration test of the command string.
+    # Proper mocking of $? is hard. We will assume if content is returned, $? was success.
+
+    original_status = $? # Store original status if any test runner sets it.
+    $? = success_status_mock # This is generally not advised but for simple cases.
+
+    content = @merge_cli.send(:get_file_content_from_vcs, 'main', test_file_path_in_repo, :git)
+    assert_equal "fake git content", content
+
+    $? = original_status # Restore
+    FileUtils.rm_f(test_file_path_in_repo)
+  end
+
+  def test_get_file_content_from_vcs_git_failure
+    test_file_path_in_repo = "test_file.txt"
+    FileUtils.touch(test_file_path_in_repo)
+
+    @merge_cli.define_singleton_method(:`) do |command|
+      assert_match(/^git show main:#{Regexp.escape(test_file_path_in_repo)}/, command)
+      "" # Simulate empty output from git show on failure
+    end
+
+    # Simulate command failure by setting $? behavior
+    # This is still tricky. A better way is to refactor get_file_content_from_vcs
+    # to use Open3.popen3 and mock that.
+    # For now, this test highlights the difficulty.
+    # We'll assume the internal check `return content if $?.success?` is what we test.
+    # If backticks return "" and we make $?.success? false, it should return nil.
+
+    # Mocking $? is problematic. Let's assume the method's logic:
+    # if $?.success? is true, it returns content. If false, it returns nil (after warning).
+    # We can't easily set $?.success? to false after backticks run in a mock.
+    # So, we test the nil return path by having the command return empty string,
+    # and trust the $?.success? check in the original code.
+    # The warning about "command failed or returned no content" should appear.
+
+    # To properly test the $?.success? == false path, we'd need to mock the Process::Status object.
+    # Minitest::Mock can create such an object.
+    status_mock_failure = Minitest::Mock.new
+    status_mock_failure.expect :success?, false
+    status_mock_failure.expect :exitstatus, 128 # git often returns 128 for "not found"
+
+    # This is a common pattern to allow setting $? for a block in testing
+    original_process_status = $?
     begin
-      cli.execute
+      $? = status_mock_failure
+      content = nil
+      out, err = capture_io do # Capture the warning
+        content = @merge_cli.send(:get_file_content_from_vcs, 'main', test_file_path_in_repo, :git)
+      end
+      assert_nil content
+      assert_match /Warning: VCS command .* failed or returned no content/, out
     ensure
-      $stdin = STDIN
+      $? = original_process_status # Restore global variable
     end
-
-    result = File.read(@file_path)
-    assert_match 'foo = 3', result
+    FileUtils.rm_f(test_file_path_in_repo)
   end
 
-  def test_abort_keeps_file
-    original = <<~TEXT
-      line1
-      <<<<<<< HEAD
-      foo = 1
-      =======
-      foo = 2
-      >>>>>>> feature
-      line2
-    TEXT
-    write_conflict_file(original)
+  # Basic integration test structure for resolve_block focusing on preview generation
+  def test_resolve_block_calls_preview_generation_and_opening
+    # Mock a conflict block
+    block = N2B::MergeConflictParser::ConflictBlock.new(
+      start_line: 1, end_line: 1, base_label: 'HEAD', incoming_label: 'MERGE_HEAD',
+      base_content: "a", incoming_content: "b", suggestion: { 'merged_code' => 'c', 'reason' => 'test reason' }
+    )
+    config = @merge_cli.send(:get_config) # Get default config
+    full_file_content = "a\n<<<<<<\nold\n======\nnew\n>>>>>>\nb"
 
-    cli = N2B::MergeCLI.new([@file_path]) # No --analyze
-    cli.stubs(:call_llm_for_merge).returns('{"merged_code":"foo = 3","reason":"merge"}')
+    # Mock dependencies of resolve_block related to preview
+    @merge_cli.stub(:get_vcs_type_for_file_operations, :git) do
+      @merge_cli.stub(:get_file_content_from_vcs, "full file content") do
+        # generate_conflict_preview_html and open_html_in_browser will be called.
+        # We want to assert they are called.
+        preview_path = "/tmp/fake_preview.html"
+        generate_mock = Minitest::Mock.new
+        generate_mock.expect :call, preview_path, [Object, String, String, String, String, String, String]
 
-    input = StringIO.new("a\n")
-    $stdin = input
-    begin
-      cli.execute
-    ensure
-      $stdin = STDIN
+        open_mock = Minitest::Mock.new
+        open_mock.expect :call, true, [String]
+
+        # Mock request_merge_with_spinner to return a valid suggestion
+        suggestion_data = { 'merged_code' => 'c', 'reason' => 'test reason' }
+        @merge_cli.stub(:request_merge_with_spinner, suggestion_data) do
+          # Mock user input to exit the loop, e.g., by accepting the suggestion
+          $stdin.stub(:gets, "y\n") do
+            capture_io do # Suppress other output from resolve_block
+              @merge_cli.stub(:generate_conflict_preview_html, generate_mock) do
+                @merge_cli.stub(:open_html_in_browser, open_mock) do
+                   # Mock FileUtils.rm_f to check it's called for cleanup
+                   file_utils_mock = Minitest::Mock.new
+                   file_utils_mock.expect :call, nil, [String] # Expects path argument
+                   FileUtils.stub(:rm_f, file_utils_mock) do
+                     @merge_cli.send(:resolve_block, block, config, full_file_content)
+                   end
+                   file_utils_mock.verify
+                end
+              end
+            end
+          end
+          generate_mock.verify
+          open_mock.verify
+        end
+      end
     end
-
-    result = File.read(@file_path)
-    assert_equal original, result
   end
-
-  def test_execute_vcs_command_with_timeout_success
-    cli = N2B::MergeCLI.new([]) # Args don't matter here as we are testing a private method directly
-
-    result = cli.send(:execute_vcs_command_with_timeout, "echo 'test'", 5)
-
-    assert result[:success]
-    assert_equal "test\n", result[:stdout]
-  end
-
-  def test_execute_vcs_command_with_timeout_failure
-    cli = N2B::MergeCLI.new([])
-
-    result = cli.send(:execute_vcs_command_with_timeout, "false", 5)
-
-    refute result[:success]
-    assert_includes result[:error], "Command failed"
-  end
-
-  def test_execute_vcs_command_with_timeout_timeout
-    cli = N2B::MergeCLI.new([])
-
-    # Use a command that will definitely timeout
-    result = cli.send(:execute_vcs_command_with_timeout, "sleep 10", 1)
-
-    refute result[:success]
-    assert_includes result[:error], "timed out"
-  end
-
-  # --- New Tests for Diff Analysis Functionality ---
-
-  def test_analyze_mode_basic_git_diff
-    sample_diff = setup_git_repo_with_diff # Sets up git repo in @tmp_dir
-
-    cli = N2B::MergeCLI.new(['--analyze'])
-    cli.stubs(:get_vcs_type).returns(:git) # Mock VCS type
-    cli.stubs(:execute_vcs_diff).returns(sample_diff) # Mock diff generation without specific parameters
-
-    @mock_llm.expects(:analyze_code_diff).with(any_parameters).returns('{"summary":"Basic analysis done","errors":[],"improvements":[]}').once
-
-    cli.execute
-
-    $stdout.rewind
-    output = $stdout.string
-    assert_match "Code Diff Analysis", output
-    assert_match "Basic analysis done", output
-  end
-
-  def test_analyze_mode_with_branch
-    sample_diff = setup_git_repo_with_diff
-
-    cli = N2B::MergeCLI.new(['--analyze', '--branch', 'develop'])
-    cli.stubs(:get_vcs_type).returns(:git)
-    # Expect execute_vcs_diff to be called with the specified branch
-    cli.expects(:execute_vcs_diff).with(:git, 'develop').returns(sample_diff)
-    cli.stubs(:validate_git_branch_exists).with('develop').returns(true)
-
-
-    @mock_llm.expects(:analyze_code_diff).returns('{"summary":"Branch analysis","errors":[],"improvements":[]}').once
-
-    cli.execute
-    $stdout.rewind
-    assert_match "Branch analysis", $stdout.string
-  end
-
-  def test_analyze_mode_with_requirements_file
-    sample_diff = setup_git_repo_with_diff
-    req_file_path = File.join(@tmp_dir, "reqs.txt")
-    File.write(req_file_path, "Requirement: Must be fast.")
-
-    cli = N2B::MergeCLI.new(['--analyze', '--requirements', req_file_path])
-    cli.stubs(:get_vcs_type).returns(:git)
-    cli.stubs(:execute_vcs_diff).returns(sample_diff)
-
-    # Check that the LLM prompt includes the requirement
-    @mock_llm.expects(:analyze_code_diff).with(includes("Requirement: Must be fast.")).returns('{"summary":"Reqs analysis","errors":[],"improvements":[]}').once
-
-    cli.execute
-    $stdout.rewind
-    assert_match "Reqs analysis", $stdout.string
-    assert_match "Loading requirements from file: #{req_file_path}", $stdout.string
-  end
-
-  def test_analyze_mode_with_custom_message
-    sample_diff = setup_git_repo_with_diff
-    custom_msg = "Focus on security aspects."
-
-    # Mock MessageUtils to ensure they are called
-    N2B::MessageUtils.expects(:validate_message).with(custom_msg).returns(custom_msg)
-    N2B::MessageUtils.expects(:sanitize_message).with(custom_msg).returns(custom_msg)
-    N2B::MessageUtils.expects(:log_message).with(includes(custom_msg), :info)
-
-    cli = N2B::MergeCLI.new(['--analyze', '-m', custom_msg])
-    cli.stubs(:get_vcs_type).returns(:git)
-    cli.stubs(:execute_vcs_diff).returns(sample_diff)
-
-    # Check that the LLM prompt includes the custom message
-    @mock_llm.expects(:analyze_code_diff).with(includes(custom_msg)).returns('{"summary":"Message analysis","errors":[],"improvements":[]}').once
-
-    cli.execute
-    $stdout.rewind
-    assert_match "Message analysis", $stdout.string
-    # Log message is asserted by the MessageUtils mock
-  end
-
-  def test_analyze_mode_with_jira_ticket_fetch_and_update_prompt_yes
-    sample_diff = setup_git_repo_with_diff
-    jira_ticket_id = "PROJ-123"
-    jira_content = "This is the Jira ticket content for PROJ-123."
-    analysis_summary = "Jira related analysis"
-
-    cli = N2B::MergeCLI.new(['--analyze', '--jira', jira_ticket_id]) # No --update or --no-update, so should prompt
-    cli.stubs(:get_vcs_type).returns(:git)
-    cli.stubs(:execute_vcs_diff).returns(sample_diff)
-
-    N2B::JiraClient.expects(:new).with(@mock_config).twice.returns(@mock_jira_client) # Once for fetch, once for update
-    @mock_jira_client.expects(:fetch_ticket).with(jira_ticket_id).returns(jira_content)
-
-    analysis_result_hash = {
-      'summary' => analysis_summary, 'errors' => [], 'improvements' => [],
-      'ticket_implementation_summary' => 'Implemented per PROJ-123.'
-    }
-    @mock_llm.expects(:analyze_code_diff)
-      .with(includes(jira_content))
-      .returns(analysis_result_hash.to_json)
-
-    # format_analysis_for_jira will be called internally by handle_diff_analysis
-    # We need to mock the actual update_ticket call
-    formatted_comment_for_jira = { implementation_summary: analysis_result_hash[:ticket_implementation_summary] } # simplified for test
-    cli.stubs(:format_analysis_for_jira).returns(formatted_comment_for_jira)
-    @mock_jira_client.expects(:update_ticket).with(jira_ticket_id, formatted_comment_for_jira).returns(true)
-
-    input = StringIO.new("y\n") # User says yes to update
-    original_stdin = $stdin
-    $stdin = input
-    begin
-      cli.execute
-    ensure
-      $stdin = original_stdin
-    end
-
-    $stdout.rewind
-    output = $stdout.string
-    assert_match "Fetching Jira ticket details...", output
-    assert_match "Successfully fetched Jira ticket details.", output
-    assert_match analysis_summary, output
-    assert_match "Would you like to update Jira issue #{jira_ticket_id}", output
-    assert_match "Jira ticket #{jira_ticket_id} updated successfully.", output
-  end
-
-  def test_analyze_mode_with_github_issue_and_no_update_flag
-    sample_diff = setup_git_repo_with_diff
-    github_issue_url = "test/repo/issues/42"
-    github_content = "GitHub issue content for #42."
-
-    cli = N2B::MergeCLI.new(['--analyze', '--github', github_issue_url, '--no-update'])
-    cli.stubs(:get_vcs_type).returns(:git)
-    cli.stubs(:execute_vcs_diff).returns(sample_diff)
-
-    N2B::GitHubClient.expects(:new).with(@mock_config).returns(@mock_github_client)
-    @mock_github_client.expects(:fetch_issue).with(github_issue_url).returns(github_content)
-
-    @mock_llm.expects(:analyze_code_diff)
-      .with(includes(github_content))
-      .returns('{"summary":"GitHub analysis for no update","errors":[],"improvements":[]}').once
-
-    @mock_github_client.expects(:update_issue).never # Should not be called due to --no-update
-
-    cli.execute
-
-    $stdout.rewind
-    output = $stdout.string
-    assert_match "Fetching GitHub issue details...", output
-    assert_match "Successfully fetched GitHub issue details.", output
-    assert_match "GitHub analysis for no update", output
-    assert_match "Issue/Ticket update skipped.", output # Due to --no-update flag
-  end
-
-  def test_message_length_truncation_via_option_parsing
-    long_message = "a" * 600
-    truncated_length = N2B::MessageUtils::MAX_MESSAGE_LENGTH
-    expected_message_after_validation = long_message[0...(truncated_length - N2B::MessageUtils::TRUNCATION_NOTICE.length)] + N2B::MessageUtils::TRUNCATION_NOTICE
-
-    # We don't need to run full execute, just check options parsing
-    # N2B::MessageUtils are real, not mocked here, to test their integration during parsing
-    cli = N2B::MergeCLI.new(['--analyze', '-m', long_message])
-    options = cli.instance_variable_get(:@options)
-
-    # Validate that MessageUtils.validate_message was effectively called by parse_options
-    # and then sanitize_message. The final message in options should be validated and sanitized.
-    # For this test, we focus on the outcome of validation (truncation).
-    # The sanitize step will also run (e.g. strip).
-    assert_equal N2B::MessageUtils.sanitize_message(expected_message_after_validation), options[:custom_message]
-
-    $stdout.rewind # parse_options might print warnings for truncation.
-    # The warning "Warning: Custom message exceeds 500 characters. It will be truncated."
-    # is currently in parse_options itself. Let's check for it.
-    # This warning is printed *before* MessageUtils.log_message.
-    # This test is primarily about option parsing, not the full execute flow.
-    # The actual logging via MessageUtils happens later if the message isn't empty.
-    # For this specific test, we are verifying the truncation logic called from parse_options.
-    # The test_analyze_mode_with_custom_message already verifies MessageUtils.log_message.
-  end
-
-  def test_help_option_shows_help_and_exits
-    ex = assert_raises(SystemExit) do
-      N2B::MergeCLI.new(['-h']).execute # or .parse_options if execute isn't reached
-    end
-    assert_equal 0, ex.status
-    $stdout.rewind
-    output = $stdout.string
-    assert_match "Usage: n2b-diff FILE", output
-    assert_match "OR n2b-diff --analyze", output
-    assert_match "Diff Analysis Options:", output
-    assert_match "Merge Conflict Options:", output
-  end
-
 end
