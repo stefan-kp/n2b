@@ -1,5 +1,11 @@
 require 'shellwords'
 require 'rbconfig'
+require 'optparse'
+require 'fileutils'
+require 'stringio'
+require 'cgi'
+require_relative 'base'
+require_relative 'merge_conflict_parser'
 require_relative 'jira_client'
 require_relative 'github_client'
 require_relative 'message_utils'
@@ -897,8 +903,13 @@ REQUIREMENTS_BLOCK
       puts "#{COLOR_GREEN}✅ Initial suggestion ready!#{COLOR_RESET}\n"
 
       vcs_type = get_vcs_type_for_file_operations
-      base_content_full = get_file_content_from_vcs(block.base_label, @file_path, vcs_type) || difficulté_to_load_content_placeholder("base content from #{block.base_label}")
-      incoming_content_full = get_file_content_from_vcs(block.incoming_label, @file_path, vcs_type) || difficulté_to_load_content_placeholder("incoming content from #{block.incoming_label}")
+
+      # Convert conflict labels to actual VCS revision identifiers
+      base_revision = convert_label_to_revision(block.base_label, vcs_type, :base)
+      incoming_revision = convert_label_to_revision(block.incoming_label, vcs_type, :incoming)
+
+      base_content_full = get_file_content_from_vcs(base_revision, @file_path, vcs_type) || difficulté_to_load_content_placeholder("base content from #{block.base_label}")
+      incoming_content_full = get_file_content_from_vcs(incoming_revision, @file_path, vcs_type) || difficulté_to_load_content_placeholder("incoming content from #{block.incoming_label}")
 
       generated_html_path = nil
 
@@ -906,7 +917,7 @@ REQUIREMENTS_BLOCK
         loop do
           current_resolution_content_full = apply_hunk_to_full_content(full_file_content, block, suggestion['merged_code'])
 
-          FileUtils.rm_f(generated_html_path) if generated_html_path && File.exist?(generated_html_path)
+          # Don't delete the HTML file immediately - keep it available for user preview
 
           generated_html_path = generate_conflict_preview_html(
             block,
@@ -915,12 +926,12 @@ REQUIREMENTS_BLOCK
             current_resolution_content_full,
             block.base_label,
             block.incoming_label,
-            @file_path
+            @file_path,
+            suggestion
           )
 
           preview_link_message = ""
           if generated_html_path && File.exist?(generated_html_path)
-            open_html_in_browser(generated_html_path)
             preview_link_message = "🌐 #{COLOR_BLUE}Preview: file://#{generated_html_path}#{COLOR_RESET}"
           else
             preview_link_message = "#{COLOR_YELLOW}⚠️  Could not generate HTML preview.#{COLOR_RESET}"
@@ -931,7 +942,7 @@ REQUIREMENTS_BLOCK
           print_suggestion(suggestion)
 
           prompt_message = <<~PROMPT
-            #{COLOR_YELLOW}Actions: [y] Accept, [n] Skip, [c] Comment, [e] Edit, [s] Refresh Preview, [a] Abort#{COLOR_RESET}
+            #{COLOR_YELLOW}Actions: [y] Accept, [n] Skip, [c] Comment, [e] Edit, [p] Preview, [s] Refresh, [a] Abort#{COLOR_RESET}
             #{COLOR_GRAY}(Preview link above can be cmd/ctrl+clicked if your terminal supports it){COLOR_RESET}
             #{COLOR_YELLOW}Your choice: #{COLOR_RESET}
           PROMPT
@@ -962,6 +973,14 @@ REQUIREMENTS_BLOCK
               suggestion = request_merge_with_spinner(block, config, comment, full_file_content)
             end
             # Loop continues, will regenerate preview
+          when 'p' # Open Preview in Browser
+            if generated_html_path && File.exist?(generated_html_path)
+              puts "#{COLOR_BLUE}🌐 Opening preview in browser...#{COLOR_RESET}"
+              open_html_in_browser(generated_html_path)
+            else
+              puts "#{COLOR_YELLOW}⚠️  No preview available to open.#{COLOR_RESET}"
+            end
+            # Loop continues, no changes to suggestion
           when 's' # Refresh Preview
             puts "#{COLOR_BLUE}🔄 Refreshing suggestion and preview...#{COLOR_RESET}"
             suggestion = request_merge_with_spinner(block, config, comment, full_file_content)
@@ -1044,6 +1063,8 @@ REQUIREMENTS_BLOCK
       user_comment_text = comment && !comment.empty? ? "User comment: #{comment}" : ""
 
       template.gsub('{full_file_content}', full_file_content.to_s)
+              .gsub('{start_line}', block.start_line.to_s)
+              .gsub('{end_line}', block.end_line.to_s)
               .gsub('{context_before}', block.context_before.to_s)
               .gsub('{base_label}', block.base_label.to_s)
               .gsub('{base_content}', block.base_content.to_s)
@@ -1583,7 +1604,6 @@ REQUIREMENTS_BLOCK
 
             # Let's re-read the file and extract the relevant segment for the log.
             # The actual application of changes happens because `resolve_block` will use the modified `lines` array.
-            new_lines_array = File.readlines(@file_path, chomp: true)
             # We need to estimate the new end_line. This is complex.
             # For now, let's just say "user resolved". The actual diff applied will be based on the whole file change.
             # The `merged_code` for logging can be a placeholder or the new content of the block.
@@ -1988,6 +2008,34 @@ REQUIREMENTS_BLOCK
       get_vcs_type
     end
 
+    def convert_label_to_revision(label, vcs_type, side)
+      # Convert conflict marker labels to actual VCS revision identifiers
+      case vcs_type
+      when :git
+        case label.downcase
+        when /head|working.*copy|current/
+          'HEAD'
+        when /merge.*rev|incoming|branch/
+          'MERGE_HEAD'
+        else
+          # If it's already a valid Git revision, use it as-is
+          label
+        end
+      when :hg
+        case label.downcase
+        when /working.*copy|current/
+          '.'  # Current working directory parent
+        when /merge.*rev|incoming|branch/
+          'p2()'  # Second parent (incoming branch)
+        else
+          # If it's already a valid Mercurial revision, use it as-is
+          label
+        end
+      else
+        label
+      end
+    end
+
     def get_file_content_from_vcs(label, file_path, vcs_type)
       # Note: file_path is the path in the working directory.
       # VCS commands often need path relative to repo root if not run from root.
@@ -2112,7 +2160,7 @@ REQUIREMENTS_BLOCK
       nil
     end
 
-    def generate_conflict_preview_html(block_details, base_content_full, incoming_content_full, current_resolution_content_full, base_branch_name, incoming_branch_name, file_path)
+    def generate_conflict_preview_html(block_details, base_content_full, incoming_content_full, current_resolution_content_full, base_branch_name, incoming_branch_name, file_path, llm_suggestion = nil)
       require 'cgi' # For CGI.escapeHTML
       require 'fileutils' # For FileUtils.mkdir_p
       require 'shellwords' # For Shellwords.escape, already used elsewhere but good to have contextually
@@ -2125,10 +2173,10 @@ REQUIREMENTS_BLOCK
       base_highlight_lines = find_sub_content_lines(base_content_full, block_details.base_content)
       incoming_highlight_lines = find_sub_content_lines(incoming_content_full, block_details.incoming_content)
 
-      # For resolution, highlight the suggested merged code within the full resolution content
-      # block_details.suggestion might be nil if this is called before LLM
-      llm_suggested_block = block_details.suggestion ? block_details.suggestion['merged_code'] : ""
-      resolution_highlight_lines = find_sub_content_lines(current_resolution_content_full, llm_suggested_block)
+      # For resolution, highlight the conflict area within the full resolution content
+      # The current_resolution_content_full already contains the resolved content
+      # We'll highlight the same line range as the original conflict
+      resolution_highlight_lines = { start: block_details.start_line, end: block_details.end_line }
 
       html_content = StringIO.new
       html_content << "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
@@ -2144,23 +2192,34 @@ REQUIREMENTS_BLOCK
       html_content << "    body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }\n"
       html_content << "    .header { padding: 10px; background-color: #f0f0f0; border-bottom: 1px solid #ccc; text-align: center; }\n"
       html_content << "    .header h2 { margin: 0; }\n"
+      html_content << "    .llm-message { padding: 10px; background-color: #e8f4fd; border-bottom: 1px solid #ccc; margin: 0; }\n"
+      html_content << "    .llm-message h3 { margin: 0 0 5px 0; color: #1976d2; font-size: 0.9em; }\n"
+      html_content << "    .llm-message p { margin: 0; color: #424242; font-size: 0.85em; line-height: 1.3; }\n"
       html_content << "    .columns-container { display: flex; flex: 1; overflow: hidden; }\n"
       html_content << "    .column { flex: 1; padding: 0; border-left: 1px solid #ccc; overflow-y: auto; display: flex; flex-direction: column; }\n"
       html_content << "    .column:first-child { border-left: none; }\n"
       html_content << "    .column h3 { background-color: #e0e0e0; padding: 8px 10px; margin: 0; border-bottom: 1px solid #ccc; text-align: center; font-size: 1em; }\n"
-      html_content << "    .code-container { flex: 1; overflow-y: auto; /* Allows pre to scroll if content overflows */ }\n"
-      html_content << "    pre { margin: 0; padding: 0; counter-reset: line; height: 100%; /* Needed for scrolling */ }\n"
-      html_content << "    code { display: block; padding: 10px; font-family: 'SF Mono', Monaco, Inconsolata, 'Fira Code', monospace; font-size: 0.85em; line-height: 1.4em; }\n"
-      html_content << "    .line { display: block; counter-increment: line; padding-left: 50px; position: relative; }\n"
-      html_content << "    .line::before { content: counter(line); position: absolute; left: 0; width: 40px; padding-right: 10px; text-align: right; color: #999; user-select: none; }\n"
-      html_content << "    .conflict-lines { background-color: #fff8dc; /* Light yellow */ }\n"
-      html_content << "    .conflict-lines-base { background-color: #ffebee; /* Light red for base changes */ }\n"
-      html_content << "    .conflict-lines-incoming { background-color: #e3f2fd; /* Light blue for incoming changes */ }\n"
-      html_content << "    .conflict-lines-resolution { background-color: #e8f5e9; /* Light green for resolution */ }\n"
+      html_content << "    .code-container { flex: 1; overflow-y: auto; position: relative; }\n"
+      html_content << "    pre { margin: 0; padding: 0; height: 100%; }\n"
+      html_content << "    code { display: block; padding: 10px 10px 10px 60px; font-family: 'SF Mono', Monaco, Inconsolata, 'Fira Code', monospace; font-size: 0.85em; line-height: 1.4em; }\n"
+      html_content << "    .line { display: block; position: relative; }\n"
+      html_content << "    .line-number { position: absolute; left: 0; width: 50px; padding-right: 10px; text-align: right; color: #999; user-select: none; font-size: 0.8em; background-color: #f8f8f8; border-right: 1px solid #e0e0e0; }\n"
+      html_content << "    .conflict-lines-base { background-color: #ffebee; border-left: 3px solid #f44336; }\n"
+      html_content << "    .conflict-lines-incoming { background-color: #e3f2fd; border-left: 3px solid #2196f3; }\n"
+      html_content << "    .conflict-lines-resolution { background-color: #e8f5e9; border-left: 3px solid #4caf50; }\n"
       html_content << "    @media (max-width: 768px) { .columns-container { flex-direction: column; } .column { border-left: none; border-top: 1px solid #ccc;} }\n"
       html_content << "  </style>\n</head>\n<body>\n"
 
       html_content << "  <div class=\"header\"><h2>Conflict Preview: #{CGI.escapeHTML(file_path)}</h2></div>\n"
+
+      # Add LLM message section if available
+      if llm_suggestion && llm_suggestion['reason']
+        html_content << "  <div class=\"llm-message\">\n"
+        html_content << "    <h3>🤖 AI Analysis & Suggestion</h3>\n"
+        html_content << "    <p>#{CGI.escapeHTML(llm_suggestion['reason'])}</p>\n"
+        html_content << "  </div>\n"
+      end
+
       html_content << "  <div class=\"columns-container\">\n"
 
       # Helper to generate HTML for one column
@@ -2176,7 +2235,7 @@ REQUIREMENTS_BLOCK
           if highlight_info && line_number >= highlight_info[:start] && line_number <= highlight_info[:end]
             line_class += " conflict-lines conflict-lines-#{highlight_class_suffix}"
           end
-          html_content << "<span class=\"#{line_class}\">#{CGI.escapeHTML(line_text.chomp)}</span>\n"
+          html_content << "<span class=\"#{line_class}\"><span class=\"line-number\">#{line_number}</span>#{CGI.escapeHTML(line_text.chomp)}</span>\n"
         end
 
         html_content << "        </code></pre>\n"
@@ -2192,11 +2251,14 @@ REQUIREMENTS_BLOCK
       html_content << "  <script>hljs.highlightAll();</script>\n"
       html_content << "</body>\n</html>"
 
-      # Save to file
+      # Save to file with unique but persistent naming
       log_dir = '.n2b_merge_log'
       FileUtils.mkdir_p(log_dir)
-      timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
-      preview_filename = "conflict_preview_#{File.basename(file_path)}_#{timestamp}.html"
+
+      # Create a more stable filename based on file path and conflict location
+      file_basename = File.basename(file_path, '.*')
+      conflict_id = "#{block_details.start_line}_#{block_details.end_line}"
+      preview_filename = "conflict_#{file_basename}_lines_#{conflict_id}.html"
       full_preview_path = File.join(log_dir, preview_filename)
 
       File.write(full_preview_path, html_content.string)

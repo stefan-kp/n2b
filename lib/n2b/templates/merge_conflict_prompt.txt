@@ -3,7 +3,7 @@ You are a merge assistant. Combine the following conflict into a single version 
 FULL FILE CONTENT FOR CONTEXT:
 {full_file_content}
 
-CONFLICT TO RESOLVE:
+CONFLICT TO RESOLVE (Lines {start_line}-{end_line}):
 Context before:
 {context_before}
 
@@ -17,4 +17,4 @@ Context after:
 {context_after}
 {user_comment}
 
-Respond in JSON with keys "merged_code" and "reason".
+Respond in JSON with keys "merged_code" and "reason". In your reason, reference the specific line numbers ({start_line}-{end_line}) that were affected by the conflict resolution.

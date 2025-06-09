@@ -212,7 +212,7 @@ module N2B
           lines_added = '0'
           lines_removed = '0'
         end
-      rescue => e
+      rescue
         branch = 'unknown'
         files_changed = '0'
         lines_added = '0'

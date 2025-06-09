@@ -47,11 +47,8 @@ module N2B
       $stderr = StringIO.new
 
       # CRITICAL: Protect user's config file by using a test-specific config file
+      ENV['N2B_TEST_MODE'] = 'true'
       @test_config_file = File.join(@tmp_dir, 'test_config.yml')
-      @original_config_file = N2B::Base::CONFIG_FILE
-      # Override the CONFIG_FILE constant for tests
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @test_config_file)
 
       # Centralized config stubbing for all tests
       @mock_config = {
@@ -81,10 +78,7 @@ module N2B
     # end
 
     def teardown
-      # Restore the original CONFIG_FILE constant to protect user's config
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @original_config_file)
-
+      ENV['N2B_TEST_MODE'] = nil
       FileUtils.rm_rf(@tmp_dir)
       $stdout = @original_stdout
       $stderr = @original_stderr

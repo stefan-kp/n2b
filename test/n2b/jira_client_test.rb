@@ -10,13 +10,10 @@ module N2B
   class TestJiraClient < Minitest::Test
     def setup
       # CRITICAL: Protect user's config file by using a test-specific config file
+      ENV['N2B_TEST_MODE'] = 'true'
       @tmp_dir = File.expand_path("./tmp_test_jira_client_dir", Dir.pwd)
       FileUtils.mkdir_p(@tmp_dir)
       @test_config_file = File.join(@tmp_dir, 'test_config.yml')
-      @original_config_file = N2B::Base::CONFIG_FILE
-      # Override the CONFIG_FILE constant for tests
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @test_config_file)
 
       @config_data = {
         'jira' => {
@@ -37,10 +34,7 @@ module N2B
     end
 
     def teardown
-      # Restore the original CONFIG_FILE constant to protect user's config
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @original_config_file)
-
+      ENV['N2B_TEST_MODE'] = nil
       FileUtils.rm_rf(@tmp_dir)
     end
 

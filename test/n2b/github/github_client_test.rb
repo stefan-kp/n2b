@@ -5,12 +5,10 @@ require 'fileutils'
 module N2B
   class TestGitHubClient < Minitest::Test
     def setup
+      ENV['N2B_TEST_MODE'] = 'true'
       @tmp_dir = File.expand_path('./tmp_test_github_client_dir', Dir.pwd)
       FileUtils.mkdir_p(@tmp_dir)
       @test_config_file = File.join(@tmp_dir, 'config.yml')
-      @original_config_file = N2B::Base::CONFIG_FILE
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @test_config_file)
 
       @config = {
         'github' => {
@@ -24,8 +22,7 @@ module N2B
     end
 
     def teardown
-      N2B::Base.send(:remove_const, :CONFIG_FILE) if N2B::Base.const_defined?(:CONFIG_FILE)
-      N2B::Base.const_set(:CONFIG_FILE, @original_config_file)
+      ENV['N2B_TEST_MODE'] = nil
       FileUtils.rm_rf(@tmp_dir)
     end
 

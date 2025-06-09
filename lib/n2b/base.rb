@@ -3,12 +3,36 @@ require_relative 'model_config'
 module N2B
   class Base
 
-    CONFIG_FILE = ENV['N2B_CONFIG_FILE'] || File.expand_path('~/.n2b/config.yml')
-    HISTORY_FILE = ENV['N2B_HISTORY_FILE'] || File.expand_path('~/.n2b/history')
+    def self.config_file
+      # Bulletproof test environment detection
+      if test_environment?
+        File.expand_path('~/.n2b_test/config.yml')
+      else
+        ENV['N2B_CONFIG_FILE'] || File.expand_path('~/.n2b/config.yml')
+      end
+    end
+
+    def self.history_file
+      if test_environment?
+        File.expand_path('~/.n2b_test/history')
+      else
+        ENV['N2B_HISTORY_FILE'] || File.expand_path('~/.n2b/history')
+      end
+    end
+
+    def self.test_environment?
+      # Multiple ways to detect test environment for maximum safety
+      ENV['RAILS_ENV'] == 'test' ||
+      ENV['RACK_ENV'] == 'test' ||
+      ENV['N2B_TEST_MODE'] == 'true' ||
+      $PROGRAM_NAME.include?('rake') ||
+      $PROGRAM_NAME.include?('test') ||
+      caller.any? { |line| line.include?('test/') || line.include?('minitest') || line.include?('rake') }
+    end
 
     def load_config
-      if File.exist?(CONFIG_FILE)
-        YAML.load_file(CONFIG_FILE)
+      if File.exist?(self.class.config_file)
+        YAML.load_file(self.class.config_file)
       else
         { }
       end
@@ -152,6 +176,9 @@ module N2B
             config['append_to_shell_history'] = $stdin.gets.chomp.then { |val| val.empty? ? config['append_to_shell_history'] : (val.downcase == 'true') }
             config['privacy']['append_to_shell_history'] = config['append_to_shell_history'] # Also place under privacy for consistency
 
+            # Editor Configuration
+            prompt_for_editor_config(config)
+
           else # User chose 'n' for advanced settings
             config['jira'] ||= {}
             config['github'] ||= {}
@@ -194,9 +221,9 @@ module N2B
           puts "Configuration saved with warnings."
         end
 
-        puts "\nConfiguration saved to #{CONFIG_FILE}"
-        FileUtils.mkdir_p(File.dirname(CONFIG_FILE)) unless File.exist?(File.dirname(CONFIG_FILE))
-        File.write(CONFIG_FILE, config.to_yaml)
+        puts "\nConfiguration saved to #{self.class.config_file}"
+        FileUtils.mkdir_p(File.dirname(self.class.config_file)) unless File.exist?(File.dirname(self.class.config_file))
+        File.write(self.class.config_file, config.to_yaml)
       else
         # If not reconfiguring, still ensure privacy and jira keys exist with defaults if missing
         # This handles configs from before these settings were introduced
