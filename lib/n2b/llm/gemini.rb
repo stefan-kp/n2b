@@ -1,7 +1,7 @@
 require 'net/http'
 require 'json'
 require 'uri'
-require 'googleauth' # Added for service account authentication
+# Removed googleauth require
 require_relative '../model_config'
 
 module N2B
@@ -10,7 +10,7 @@ module N2B
       API_URI = URI.parse('https://generativelanguage.googleapis.com/v1beta/models')
 
       def initialize(config)
-        @config = config # Retain for model name and gemini_credential_file access
+        @config = config # Used for access_key and model
       end
 
       def get_model_name
@@ -25,24 +25,12 @@ module N2B
 
       def make_request(content)
         model = get_model_name
-        # Remove API key from URI
-        uri = URI.parse("#{API_URI}/#{model}:generateContent")
+        uri = URI.parse("#{API_URI}/#{model}:generateContent?key=#{@config['access_key']}")
         
         request = Net::HTTP::Post.new(uri)
         request.content_type = 'application/json'
 
-        # Add Authorization header
-        begin
-          scope = 'https://www.googleapis.com/auth/cloud-platform'
-          authorizer = Google::Auth::ServiceAccountCredentials.make_creds(
-            json_key_io: File.open(@config['gemini_credential_file']),
-            scope: scope
-          )
-          access_token = authorizer.fetch_access_token!['access_token']
-          request['Authorization'] = "Bearer #{access_token}"
-        rescue StandardError => e
-          raise N2B::LlmApiError.new("Failed to obtain Google Cloud access token: #{e.message}")
-        end
+        # Removed Authorization header and token fetching logic
 
         request.body = JSON.dump({
           "contents" => [{
@@ -92,24 +80,12 @@ module N2B
         # This method assumes prompt_content is the full, ready-to-send prompt
         # including all instructions for the LLM (system message, diff, user additions, JSON format).
         model = get_model_name
-        # Remove API key from URI
-        uri = URI.parse("#{API_URI}/#{model}:generateContent")
+        uri = URI.parse("#{API_URI}/#{model}:generateContent?key=#{@config['access_key']}")
 
         request = Net::HTTP::Post.new(uri)
         request.content_type = 'application/json'
 
-        # Add Authorization header
-        begin
-          scope = 'https://www.googleapis.com/auth/cloud-platform'
-          authorizer = Google::Auth::ServiceAccountCredentials.make_creds(
-            json_key_io: File.open(@config['gemini_credential_file']),
-            scope: scope
-          )
-          access_token = authorizer.fetch_access_token!['access_token']
-          request['Authorization'] = "Bearer #{access_token}"
-        rescue StandardError => e
-          raise N2B::LlmApiError.new("Failed to obtain Google Cloud access token: #{e.message}")
-        end
+        # Removed Authorization header and token fetching logic
 
         request.body = JSON.dump({
           "contents" => [{

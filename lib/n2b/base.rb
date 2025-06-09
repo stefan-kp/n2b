@@ -48,11 +48,11 @@ module N2B
 
       if api_key.nil? || api_key == '' || config['llm'].nil? || reconfigure
         puts "--- N2B Core LLM Configuration ---"
-        print "Choose a language model to use (1:claude, 2:openai, 3:gemini, 4:openrouter, 5:ollama) [current: #{config['llm']}]: "
+        print "Choose a language model to use (1:claude, 2:openai, 3:gemini (API Key), 4:openrouter, 5:ollama, 6:vertexai (Credential File)) [current: #{config['llm']}]: "
         llm_choice = $stdin.gets.chomp
         llm_choice = config['llm'] if llm_choice.empty? && !config['llm'].nil? # Keep current if input is empty
 
-        unless ['claude', 'openai', 'gemini', 'openrouter', 'ollama', '1', '2', '3', '4', '5'].include?(llm_choice)
+        unless ['claude', 'openai', 'gemini', 'openrouter', 'ollama', 'vertexai', '1', '2', '3', '4', '5', '6'].include?(llm_choice)
           puts "Invalid language model selection. Defaulting to 'claude' or previous if available."
           llm_choice = config['llm'] || 'claude' # Fallback
         end
@@ -60,10 +60,11 @@ module N2B
         selected_llm = case llm_choice
                        when '1', 'claude' then 'claude'
                        when '2', 'openai' then 'openai'
-                       when '3', 'gemini' then 'gemini'
+                       when '3', 'gemini' then 'gemini'    # This is now explicitly API Key based Gemini
                        when '4', 'openrouter' then 'openrouter'
                        when '5', 'ollama' then 'ollama'
-                       else config['llm'] || 'claude' # Should not happen due to validation
+                       when '6', 'vertexai' then 'vertexai'  # New Vertex AI (credential file)
+                       else config['llm'] || 'claude'
                        end
         config['llm'] = selected_llm
 
@@ -71,7 +72,6 @@ module N2B
           puts "\n--- Ollama Specific Configuration ---"
           puts "Ollama typically runs locally and doesn't require an API key."
 
-          # Use new model configuration system
           current_model = config['model']
           model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
           config['model'] = model_choice
@@ -81,31 +81,30 @@ module N2B
           ollama_api_url_input = $stdin.gets.chomp
           config['ollama_api_url'] = ollama_api_url_input.empty? ? current_ollama_api_url : ollama_api_url_input
 
-          config.delete('access_key') # Remove access_key if switching to ollama
-          config.delete('gemini_credential_file') # Also remove gemini specific if switching to ollama
+          config.delete('access_key')
+          config.delete('gemini_credential_file') # old key
+          config.delete('vertex_credential_file') # new key for Vertex
 
-        elsif selected_llm == 'gemini'
-          puts "\n--- Gemini (Vertex AI) Specific Configuration ---"
-          # Prompt for credential file path
-          current_gemini_credential_file = config['gemini_credential_file']
-          print "Enter your Google Cloud credential file path for Gemini/Vertex AI #{current_gemini_credential_file ? '[leave blank to keep current]' : ''}: "
-          gemini_credential_file_input = $stdin.gets.chomp
-          if !gemini_credential_file_input.empty?
-            config['gemini_credential_file'] = gemini_credential_file_input
-          elsif current_gemini_credential_file
-            config['gemini_credential_file'] = current_gemini_credential_file
+        elsif selected_llm == 'vertexai'
+          puts "\n--- Vertex AI (Credential File) Specific Configuration ---"
+          current_vertex_credential_file = config['vertex_credential_file']
+          print "Enter your Google Cloud credential file path for Vertex AI #{current_vertex_credential_file ? '[leave blank to keep current]' : ''}: "
+          vertex_credential_file_input = $stdin.gets.chomp
+          if !vertex_credential_file_input.empty?
+            config['vertex_credential_file'] = vertex_credential_file_input
+          elsif current_vertex_credential_file
+            config['vertex_credential_file'] = current_vertex_credential_file
           else
-            config['gemini_credential_file'] = nil # Explicitly set to nil if no input and no current
+            config['vertex_credential_file'] = nil
           end
-          config.delete('access_key') # Remove access_key if switching to gemini
-          config.delete('ollama_api_url') # Remove ollama specific if switching to gemini
+          config.delete('access_key')
+          config.delete('ollama_api_url')
+          config.delete('gemini_credential_file') # old key
 
-          # Model configuration for Gemini (similar to other providers)
           current_model = config['model']
           model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
           config['model'] = model_choice
-        else
-          # Configuration for other API key based LLMs (OpenAI, Claude, OpenRouter)
+        else # API Key based LLMs: claude, openai, gemini (API Key), openrouter
           puts "\n--- #{selected_llm.capitalize} Specific Configuration ---"
           current_api_key = config['access_key']
           print "Enter your #{selected_llm} API key #{ current_api_key.nil? || current_api_key.empty? ? '' : '[leave blank to keep current]' }: "
@@ -117,10 +116,9 @@ module N2B
             puts "API key is required for #{selected_llm}."
             exit 1
           end
-
-          # Ensure other provider-specific keys are removed
-          config.delete('gemini_credential_file')
+          config.delete('vertex_credential_file') # new key for Vertex
           config.delete('ollama_api_url')
+          config.delete('gemini_credential_file') # old key
 
           current_model = config['model']
           model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
@@ -363,37 +361,76 @@ module N2B
     def validate_config(config)
       errors = []
 
-      # Validate LLM configuration
+      # Validate LLM provider selection
       if config['llm'].nil? || config['llm'].empty?
         errors << "LLM provider not specified"
       end
 
-      # Validate model name
+      # Validate model name (existing logic can likely stay as is)
       if config['model'].nil? || config['model'].empty?
         errors << "Model not specified"
-      elsif config['model'].length < 3
+      elsif config['model'].length < 3 # Example of an existing check
         errors << "Model name '#{config['model']}' seems too short - might be invalid"
-      elsif %w[y n yes no true false].include?(config['model'].downcase)
+      elsif %w[y n yes no true false].include?(config['model'].downcase) # Example
         errors << "Model name '#{config['model']}' appears to be a boolean response rather than a model name"
       end
 
-      # Validate API key for non-Ollama providers
-      if config['llm'] != 'ollama' && config['llm'] != 'gemini' && (config['access_key'].nil? || config['access_key'].empty?)
-        errors << "API key missing for #{config['llm']} provider"
-      end
+      # Provider-specific validation
+      case config['llm']
+      when 'gemini' # API Key based Gemini
+        if config['access_key'].nil? || config['access_key'].empty?
+          errors << "API key missing for gemini provider"
+        end
+        if config['vertex_credential_file'] && !config['vertex_credential_file'].empty?
+          errors << "Vertex AI credential file should not be present when gemini (API Key) provider is selected"
+        end
+        # Ensure old gemini_credential_file key is also not present
+        if config['gemini_credential_file'] && !config['gemini_credential_file'].empty?
+          errors << "Old gemini_credential_file key should not be present. Use 'gemini' (API key) or 'vertexai' (credential file)."
+        end
 
-      # ADD GEMINI SPECIFIC VALIDATION HERE
-      if config['llm'] == 'gemini'
-        if config['gemini_credential_file'].nil? || config['gemini_credential_file'].empty?
-          errors << "Credential file path for Gemini not provided"
+      when 'vertexai' # Credential File based Vertex AI
+        if config['vertex_credential_file'].nil? || config['vertex_credential_file'].empty?
+          errors << "Credential file path for Vertex AI not provided"
         else
-          unless File.exist?(config['gemini_credential_file'])
-            errors << "Credential file missing or invalid at #{config['gemini_credential_file']}"
+          # Ensure File.exist? is only called if the path is not nil and not empty
+          unless File.exist?(config['vertex_credential_file'])
+            errors << "Credential file missing or invalid at #{config['vertex_credential_file']} for Vertex AI"
           end
         end
         if config['access_key'] && !config['access_key'].empty?
-          errors << "API key (access_key) should not be present when Gemini provider is selected"
+          errors << "API key (access_key) should not be present when Vertex AI provider is selected"
         end
+         # Ensure old gemini_credential_file key is also not present
+        if config['gemini_credential_file'] && !config['gemini_credential_file'].empty?
+          errors << "Old gemini_credential_file key should not be present when Vertex AI is selected."
+        end
+
+      when 'ollama'
+        # No specific key/credential validation for Ollama here, but ensure others are not present
+        if config['access_key'] && !config['access_key'].empty?
+          errors << "API key (access_key) should not be present when Ollama provider is selected"
+        end
+        if config['vertex_credential_file'] && !config['vertex_credential_file'].empty?
+          errors << "Vertex AI credential file should not be present when Ollama provider is selected"
+        end
+        if config['gemini_credential_file'] && !config['gemini_credential_file'].empty?
+          errors << "Old gemini_credential_file key should not be present when Ollama is selected."
+        end
+        # Ollama specific validations like ollama_api_url could be here if needed
+
+      when 'claude', 'openai', 'openrouter' # Other API key based providers
+        if config['access_key'].nil? || config['access_key'].empty?
+          errors << "API key missing for #{config['llm']} provider"
+        end
+        if config['vertex_credential_file'] && !config['vertex_credential_file'].empty?
+          errors << "Vertex AI credential file should not be present for #{config['llm']} provider"
+        end
+        if config['gemini_credential_file'] && !config['gemini_credential_file'].empty?
+          errors << "Old gemini_credential_file key should not be present for #{config['llm']} provider."
+        end
+      # else
+        # This case means llm is nil or an unknown provider, already handled by the first check.
       end
 
       # Validate editor configuration (optional, so more like warnings or info)

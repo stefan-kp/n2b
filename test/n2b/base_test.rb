@@ -51,44 +51,97 @@ class TestBase < Minitest::Test
     ENV['N2B_TEST_MODE'] = nil
   end
 
-  # --- Gemini Specific Validation Tests ---
+  # --- Vertex AI (Credential File) Specific Validation Tests ---
 
-  def test_validate_config_gemini_no_credential_file
-    config = { 'llm' => 'gemini', 'model' => 'gemini-pro' }
+  def test_validate_config_vertexai_no_credential_file
+    config = { 'llm' => 'vertexai', 'model' => 'gemini-pro' } # Updated for vertexai
     errors = @base.send(:validate_config, config)
-    assert_includes errors, 'Credential file path for Gemini not provided'
+    assert_includes errors, 'Credential file path for Vertex AI not provided' # Updated error message
   end
 
-  def test_validate_config_gemini_non_existent_credential_file
+  def test_validate_config_vertexai_non_existent_credential_file # Renamed
     non_existent_path = File.join(@tmp_test_creds_dir, 'non_existent_file.json')
-    config = { 'llm' => 'gemini', 'gemini_credential_file' => non_existent_path, 'model' => 'gemini-pro' }
+    # Updated for vertexai and new key name
+    config = { 'llm' => 'vertexai', 'vertex_credential_file' => non_existent_path, 'model' => 'gemini-pro' }
     errors = @base.send(:validate_config, config)
-    assert_includes errors, "Credential file missing or invalid at #{non_existent_path}"
+    # Updated error message
+    assert_includes errors, "Credential file missing or invalid at #{non_existent_path} for Vertex AI"
   end
 
-  def test_validate_config_gemini_valid_credential_file
-    config = { 'llm' => 'gemini', 'gemini_credential_file' => @dummy_file_path, 'model' => 'gemini-pro' }
+  def test_validate_config_vertexai_valid_credential_file # Renamed
+    # Updated for vertexai and new key name
+    config = { 'llm' => 'vertexai', 'vertex_credential_file' => @dummy_file_path, 'model' => 'gemini-pro' }
     errors = @base.send(:validate_config, config)
-    # Check that no Gemini/credential specific errors are present
-    gemini_errors = errors.select { |e| e.downcase.include?('gemini') || e.downcase.include?('credential') }
-    assert_empty gemini_errors, "Expected no Gemini-specific errors with a valid credential file, but got: #{gemini_errors.join(', ')}"
-    # Explicitly check for absence of the two main errors
-    refute_includes errors, "Credential file missing or invalid at #{@dummy_file_path}"
-    refute_includes errors, 'Credential file path for Gemini not provided'
+    # Updated assertion logic for Vertex AI
+    vertex_errors = errors.select { |e| e.downcase.include?('vertex ai') || e.downcase.include?('credential') }
+    assert_empty vertex_errors, "Expected no Vertex AI-specific errors with a valid credential file, but got: #{vertex_errors.join(', ')}"
+    refute_includes errors, "Credential file missing or invalid at #{@dummy_file_path} for Vertex AI"
+    refute_includes errors, 'Credential file path for Vertex AI not provided'
   end
 
-  def test_validate_config_gemini_with_unexpected_access_key
+  def test_validate_config_vertexai_with_unexpected_access_key # Renamed
     config = {
-      'llm' => 'gemini',
-      'gemini_credential_file' => @dummy_file_path,
+      'llm' => 'vertexai', # Updated for vertexai
+      'vertex_credential_file' => @dummy_file_path, # Updated key name
       'access_key' => 'a_random_key',
       'model' => 'gemini-pro'
     }
     errors = @base.send(:validate_config, config)
-    assert_includes errors, 'API key (access_key) should not be present when Gemini provider is selected'
+    # Updated error message
+    assert_includes errors, 'API key (access_key) should not be present when Vertex AI provider is selected'
   end
 
-  # --- End Gemini Specific Validation Tests ---
+  def test_validate_config_vertexai_with_old_gemini_credential_key
+    config = {
+      'llm' => 'vertexai',
+      'vertex_credential_file' => @dummy_file_path,
+      'gemini_credential_file' => @dummy_file_path, # Presence of the old key
+      'model' => 'gemini-pro'
+    }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, "Old gemini_credential_file key should not be present when Vertex AI is selected."
+  end
+
+  # --- End Vertex AI (Credential File) Specific Validation Tests ---
+
+  # --- Gemini (API Key) Specific Validation Tests ---
+
+  def test_validate_config_gemini_no_access_key
+    config = { 'llm' => 'gemini', 'model' => 'gemini-pro' }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, 'API key missing for gemini provider'
+  end
+
+  def test_validate_config_gemini_valid_access_key
+    config = { 'llm' => 'gemini', 'access_key' => 'test_api_key', 'model' => 'gemini-pro' }
+    errors = @base.send(:validate_config, config)
+    gemini_api_errors = errors.select { |e| e.downcase.include?('gemini') || e.downcase.include?('access_key') || e.downcase.include?('api key') }
+    assert_empty gemini_api_errors, "Expected no Gemini (API Key) specific errors with a valid access key, but got: #{gemini_api_errors.join(', ')}"
+  end
+
+  def test_validate_config_gemini_with_unexpected_vertex_credential_file
+    config = {
+      'llm' => 'gemini',
+      'access_key' => 'test_api_key',
+      'vertex_credential_file' => @dummy_file_path,
+      'model' => 'gemini-pro'
+    }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, 'Vertex AI credential file should not be present when gemini (API Key) provider is selected'
+  end
+
+  def test_validate_config_gemini_with_old_gemini_credential_key
+    config = {
+      'llm' => 'gemini',
+      'access_key' => 'test_api_key',
+      'gemini_credential_file' => @dummy_file_path, # Presence of the old key
+      'model' => 'gemini-pro'
+    }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, "Old gemini_credential_file key should not be present. Use 'gemini' (API key) or 'vertexai' (credential file)."
+  end
+
+  # --- End Gemini (API Key) Specific Validation Tests ---
 
   def test_command_exists_unix_present
     # Simulate Linux environment

@@ -316,8 +316,10 @@ REQUIREMENTS_BLOCK
                 N2B::Llm::OpenAi.new(config)
               when 'claude'
                 N2B::Llm::Claude.new(config)
-              when 'gemini'
+              when 'gemini' # This is for API Key based Gemini
                 N2B::Llm::Gemini.new(config)
+              when 'vertexai' # This is for Credential File based Vertex AI
+                N2B::Llm::VertexAi.new(config)
               when 'openrouter'
                 N2B::Llm::OpenRouter.new(config)
               when 'ollama'
