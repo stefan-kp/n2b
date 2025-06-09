@@ -24,6 +24,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "json", "~> 2.0"
+  spec.add_dependency "googleauth", "~> 1.2" # Added for Gemini/Vertex AI
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "mocha", "~> 2.0"

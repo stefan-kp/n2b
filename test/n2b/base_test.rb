@@ -34,15 +34,61 @@ class TestBase < Minitest::Test
     @config_file = File.join(@config_dir, 'config.yml')
     # Ensure a clean state for config file tests
     ENV['N2B_CONFIG_FILE'] = @config_file
-    FileUtils.rm_rf(@config_dir)
+    FileUtils.rm_rf(@config_dir) # Remove main test config dir
     FileUtils.mkdir_p(@config_dir)
+
+    # Setup for Gemini credential file tests
+    @tmp_test_creds_dir = File.expand_path('../tmp_test_creds', __FILE__) # Relative to this test file
+    FileUtils.mkdir_p(@tmp_test_creds_dir)
+    @dummy_file_path = File.join(@tmp_test_creds_dir, 'dummy_creds.json')
+    File.write(@dummy_file_path, '{}') # Create an empty dummy file
   end
 
   def teardown
     FileUtils.rm_rf(@config_dir)
+    FileUtils.rm_rf(@tmp_test_creds_dir) # Cleanup dummy creds dir
     ENV['N2B_CONFIG_FILE'] = nil
     ENV['N2B_TEST_MODE'] = nil
   end
+
+  # --- Gemini Specific Validation Tests ---
+
+  def test_validate_config_gemini_no_credential_file
+    config = { 'llm' => 'gemini', 'model' => 'gemini-pro' }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, 'Credential file path for Gemini not provided'
+  end
+
+  def test_validate_config_gemini_non_existent_credential_file
+    non_existent_path = File.join(@tmp_test_creds_dir, 'non_existent_file.json')
+    config = { 'llm' => 'gemini', 'gemini_credential_file' => non_existent_path, 'model' => 'gemini-pro' }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, "Credential file missing or invalid at #{non_existent_path}"
+  end
+
+  def test_validate_config_gemini_valid_credential_file
+    config = { 'llm' => 'gemini', 'gemini_credential_file' => @dummy_file_path, 'model' => 'gemini-pro' }
+    errors = @base.send(:validate_config, config)
+    # Check that no Gemini/credential specific errors are present
+    gemini_errors = errors.select { |e| e.downcase.include?('gemini') || e.downcase.include?('credential') }
+    assert_empty gemini_errors, "Expected no Gemini-specific errors with a valid credential file, but got: #{gemini_errors.join(', ')}"
+    # Explicitly check for absence of the two main errors
+    refute_includes errors, "Credential file missing or invalid at #{@dummy_file_path}"
+    refute_includes errors, 'Credential file path for Gemini not provided'
+  end
+
+  def test_validate_config_gemini_with_unexpected_access_key
+    config = {
+      'llm' => 'gemini',
+      'gemini_credential_file' => @dummy_file_path,
+      'access_key' => 'a_random_key',
+      'model' => 'gemini-pro'
+    }
+    errors = @base.send(:validate_config, config)
+    assert_includes errors, 'API key (access_key) should not be present when Gemini provider is selected'
+  end
+
+  # --- End Gemini Specific Validation Tests ---
 
   def test_command_exists_unix_present
     # Simulate Linux environment

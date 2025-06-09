@@ -73,16 +73,39 @@ module N2B
 
           # Use new model configuration system
           current_model = config['model']
-          model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model) # Renamed to model_choice to avoid conflict
+          model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
           config['model'] = model_choice
 
           current_ollama_api_url = config['ollama_api_url'] || N2M::Llm::Ollama::DEFAULT_OLLAMA_API_URI
           print "Enter Ollama API base URL [current: #{current_ollama_api_url}]: "
           ollama_api_url_input = $stdin.gets.chomp
           config['ollama_api_url'] = ollama_api_url_input.empty? ? current_ollama_api_url : ollama_api_url_input
+
           config.delete('access_key') # Remove access_key if switching to ollama
+          config.delete('gemini_credential_file') # Also remove gemini specific if switching to ollama
+
+        elsif selected_llm == 'gemini'
+          puts "\n--- Gemini (Vertex AI) Specific Configuration ---"
+          # Prompt for credential file path
+          current_gemini_credential_file = config['gemini_credential_file']
+          print "Enter your Google Cloud credential file path for Gemini/Vertex AI #{current_gemini_credential_file ? '[leave blank to keep current]' : ''}: "
+          gemini_credential_file_input = $stdin.gets.chomp
+          if !gemini_credential_file_input.empty?
+            config['gemini_credential_file'] = gemini_credential_file_input
+          elsif current_gemini_credential_file
+            config['gemini_credential_file'] = current_gemini_credential_file
+          else
+            config['gemini_credential_file'] = nil # Explicitly set to nil if no input and no current
+          end
+          config.delete('access_key') # Remove access_key if switching to gemini
+          config.delete('ollama_api_url') # Remove ollama specific if switching to gemini
+
+          # Model configuration for Gemini (similar to other providers)
+          current_model = config['model']
+          model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
+          config['model'] = model_choice
         else
-          # Configuration for API key based LLMs
+          # Configuration for other API key based LLMs (OpenAI, Claude, OpenRouter)
           puts "\n--- #{selected_llm.capitalize} Specific Configuration ---"
           current_api_key = config['access_key']
           print "Enter your #{selected_llm} API key #{ current_api_key.nil? || current_api_key.empty? ? '' : '[leave blank to keep current]' }: "
@@ -95,8 +118,12 @@ module N2B
             exit 1
           end
 
+          # Ensure other provider-specific keys are removed
+          config.delete('gemini_credential_file')
+          config.delete('ollama_api_url')
+
           current_model = config['model']
-          model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model) # Renamed
+          model_choice = N2B::ModelConfig.get_model_choice(selected_llm, current_model)
           config['model'] = model_choice
 
           if selected_llm == 'openrouter'
@@ -351,8 +378,22 @@ module N2B
       end
 
       # Validate API key for non-Ollama providers
-      if config['llm'] != 'ollama' && (config['access_key'].nil? || config['access_key'].empty?)
+      if config['llm'] != 'ollama' && config['llm'] != 'gemini' && (config['access_key'].nil? || config['access_key'].empty?)
         errors << "API key missing for #{config['llm']} provider"
+      end
+
+      # ADD GEMINI SPECIFIC VALIDATION HERE
+      if config['llm'] == 'gemini'
+        if config['gemini_credential_file'].nil? || config['gemini_credential_file'].empty?
+          errors << "Credential file path for Gemini not provided"
+        else
+          unless File.exist?(config['gemini_credential_file'])
+            errors << "Credential file missing or invalid at #{config['gemini_credential_file']}"
+          end
+        end
+        if config['access_key'] && !config['access_key'].empty?
+          errors << "API key (access_key) should not be present when Gemini provider is selected"
+        end
       end
 
       # Validate editor configuration (optional, so more like warnings or info)
