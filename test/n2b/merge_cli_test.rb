@@ -229,5 +229,184 @@ class TestMergeCLI < Minitest::Test
     skip "Complex integration test - skipping for now"
   end
 
+  # Tests for Jira usability improvements
+  def test_jira_missing_config_shows_detailed_setup_instructions
+    # Test that when Jira is used but not configured, detailed setup instructions are shown
+    merge_cli = N2B::MergeCLI.new(['--analyze', '--jira', 'TEST-123', 'dummy_file.txt'])
+
+    # Mock config without Jira configuration
+    config = {
+      'llm' => 'claude',
+      'model' => 'claude-3-sonnet',
+      'jira' => {} # Empty Jira config
+    }
+
+    merge_cli.stub(:get_config, config) do
+      merge_cli.stub(:execute_vcs_diff, "fake diff") do
+        merge_cli.stub(:analyze_diff, { 'summary' => 'test' }) do
+          output = capture_io do
+            merge_cli.send(:handle_diff_analysis, config)
+          end
+
+          output_text = output[0] # stdout
+
+          # Should show detailed setup instructions
+          assert_match /Jira configuration is missing or incomplete/, output_text
+          assert_match /n2b --advanced-config/, output_text
+          assert_match /Jira domain \(e\.g\., your-company\.atlassian\.net\)/, output_text
+          assert_match /Your email address/, output_text
+          assert_match /Jira API token/, output_text
+          assert_match /https:\/\/id\.atlassian\.com\/manage-profile\/security\/api-tokens/, output_text
+          assert_match /read:project:jira/, output_text
+          assert_match /read:issue:jira/, output_text
+          assert_match /read:comment:jira/, output_text
+          assert_match /write:comment:jira/, output_text
+        end
+      end
+    end
+  end
+
+  def test_no_update_prompt_when_jira_not_configured
+    # Test that update prompt is NOT shown when Jira is not configured
+    merge_cli = N2B::MergeCLI.new(['--analyze', '--jira', 'TEST-123', 'dummy_file.txt'])
+
+    # Mock config without Jira configuration
+    config = {
+      'llm' => 'claude',
+      'model' => 'claude-3-sonnet',
+      'jira' => {} # Empty Jira config
+    }
+
+    analysis_result = {
+      'summary' => 'Test analysis',
+      'errors' => [],
+      'improvements' => [],
+      'test_coverage' => 'Good',
+      'requirements_evaluation' => 'Complete'
+    }
+
+    merge_cli.stub(:get_config, config) do
+      merge_cli.stub(:execute_vcs_diff, "fake diff") do
+        merge_cli.stub(:analyze_diff, analysis_result) do
+          # Mock stdin to ensure we don't get stuck waiting for input
+          $stdin.stub(:gets, "n\n") do
+            output = capture_io do
+              merge_cli.send(:handle_diff_analysis, config)
+            end
+
+            output_text = output[0] # stdout
+
+            # Should show note about service not being configured
+            assert_match /Jira is not configured, so ticket update is not available/, output_text
+            assert_match /Run 'n2b --advanced-config' to set up Jira integration/, output_text
+
+            # Should NOT ask "Would you like to update Jira issue"
+            refute_match /Would you like to update.*issue.*with this analysis/, output_text
+          end
+        end
+      end
+    end
+  end
+
+  def test_update_prompt_shown_when_jira_configured
+    # Test that update prompt IS shown when Jira is properly configured
+    merge_cli = N2B::MergeCLI.new(['--analyze', '--jira', 'TEST-123', 'dummy_file.txt'])
+
+    # Mock config WITH proper Jira configuration
+    config = {
+      'llm' => 'claude',
+      'model' => 'claude-3-sonnet',
+      'jira' => {
+        'domain' => 'test.atlassian.net',
+        'email' => 'test@example.com',
+        'api_key' => 'test-api-key'
+      }
+    }
+
+    analysis_result = {
+      'summary' => 'Test analysis',
+      'errors' => [],
+      'improvements' => [],
+      'test_coverage' => 'Good',
+      'requirements_evaluation' => 'Complete'
+    }
+
+    merge_cli.stub(:get_config, config) do
+      merge_cli.stub(:execute_vcs_diff, "fake diff") do
+        merge_cli.stub(:analyze_diff, analysis_result) do
+          # Mock Jira client to avoid actual API calls
+          mock_jira_client = Minitest::Mock.new
+          mock_jira_client.expect(:fetch_ticket, "Fake ticket content", [String])
+
+          N2B::JiraClient.stub(:new, mock_jira_client) do
+            # Mock stdin to respond 'n' to update prompt
+            $stdin.stub(:gets, "n\n") do
+              output = capture_io do
+                merge_cli.send(:handle_diff_analysis, config)
+              end
+
+              output_text = output[0] # stdout
+
+              # Should ask about updating the issue
+              assert_match /Would you like to update Jira issue.*with this analysis/, output_text
+
+              # Should NOT show the "not configured" message
+              refute_match /Jira is not configured/, output_text
+            end
+          end
+
+          mock_jira_client.verify
+        end
+      end
+    end
+  end
+
+  def test_github_missing_config_shows_setup_instructions
+    # Test that GitHub also shows proper setup instructions when not configured
+    merge_cli = N2B::MergeCLI.new(['--analyze', '--github', 'owner/repo/issues/123', 'dummy_file.txt'])
+
+    # Mock config without GitHub configuration
+    config = {
+      'llm' => 'claude',
+      'model' => 'claude-3-sonnet',
+      'github' => {} # Empty GitHub config
+    }
+
+    analysis_result = {
+      'summary' => 'Test analysis',
+      'errors' => [],
+      'improvements' => [],
+      'test_coverage' => 'Good',
+      'requirements_evaluation' => 'Complete'
+    }
+
+    merge_cli.stub(:get_config, config) do
+      merge_cli.stub(:execute_vcs_diff, "fake diff") do
+        merge_cli.stub(:analyze_diff, analysis_result) do
+          $stdin.stub(:gets, "n\n") do
+            output = capture_io do
+              merge_cli.send(:handle_diff_analysis, config)
+            end
+
+            output_text = output[0] # stdout
+
+            # Should show detailed GitHub setup instructions
+            assert_match /GitHub configuration is missing or incomplete/, output_text
+            assert_match /n2b --advanced-config/, output_text
+            assert_match /GitHub repository \(owner\/repo format\)/, output_text
+            assert_match /GitHub access token/, output_text
+            assert_match /https:\/\/github\.com\/settings\/tokens/, output_text
+
+            # Should also show the "not configured" message for update
+            assert_match /Github? is not configured, so ticket update is not available/, output_text
+            assert_match /Run 'n2b --advanced-config' to set up GitHub integration/, output_text
+
+            # Should NOT ask about updating GitHub issue
+            refute_match /Would you like to update GitHub issue/, output_text
+          end
+        end
+      end
+    end
+  end
 
 end

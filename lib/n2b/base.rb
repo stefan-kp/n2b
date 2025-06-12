@@ -224,6 +224,15 @@ module N2B
         puts "\nConfiguration saved to #{self.class.config_file}"
         FileUtils.mkdir_p(File.dirname(self.class.config_file)) unless File.exist?(File.dirname(self.class.config_file))
         File.write(self.class.config_file, config.to_yaml)
+
+        # Inform users about advanced features if they didn't configure them
+        unless prompt_for_advanced
+          puts "\n💡 Tip: Run 'n2b --advanced-config' to set up additional features like:"
+          puts "   • Jira integration for ticket analysis and updates"
+          puts "   • GitHub integration for issue tracking"
+          puts "   • Privacy settings and editor configuration"
+          puts "   • AI-powered merge conflict resolution (n2b-diff)"
+        end
       else
         # If not reconfiguring, still ensure privacy and jira keys exist with defaults if missing
         # This handles configs from before these settings were introduced

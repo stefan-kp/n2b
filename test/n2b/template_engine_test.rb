@@ -234,4 +234,41 @@ class TemplateEngineTest < Minitest::Test
     assert_includes result, "LOW: Style issue"
     assert_includes result, "All done!"
   end
+
+  def test_merge_conflict_prompt_template_includes_line_numbers
+    # Test that the merge conflict prompt template includes line number placeholders
+    template_path = File.join(File.dirname(__FILE__), '../../lib/n2b/templates/merge_conflict_prompt.txt')
+
+    assert File.exist?(template_path), "Merge conflict prompt template should exist"
+
+    template_content = File.read(template_path)
+
+    # Should include line number placeholders
+    assert_includes template_content, '{start_line}', "Template should include {start_line} placeholder"
+    assert_includes template_content, '{end_line}', "Template should include {end_line} placeholder"
+
+    # Should include contextual line number instructions
+    assert_includes template_content, 'Lines {start_line}-{end_line}', "Template should reference line range"
+    assert_includes template_content, 'reference the specific line numbers', "Template should instruct LLM to reference line numbers"
+
+    # Test that template can be rendered with line number data
+    data = {
+      'full_file_content' => "class Test\n  def method\n    puts 'hello'\n  end\nend",
+      'start_line' => '2',
+      'end_line' => '3',
+      'context_before' => 'class Test',
+      'base_label' => 'main',
+      'base_content' => 'def method\n  puts "old"',
+      'incoming_content' => 'def method\n  puts "new"',
+      'incoming_label' => 'feature',
+      'context_after' => 'end',
+      'user_comment' => ''
+    }
+
+    result = N2B::TemplateEngine.new(template_content, data).render
+
+    # Should contain the actual line numbers in the rendered output
+    assert_includes result, 'Lines 2-3', "Rendered template should include actual line numbers"
+    assert_includes result, 'line numbers (2-3)', "Rendered template should reference specific line numbers in instructions"
+  end
 end

@@ -273,8 +273,15 @@ module N2B
               puts "Proceeding with diff analysis without GitHub issue details."
             end
           else
-            puts "GitHub configuration is missing or incomplete in N2B settings."
-            puts "Please configure GitHub using 'n2b -c' (or main n2b config) to fetch issue details."
+            puts "#{COLOR_YELLOW}⚠️  GitHub configuration is missing or incomplete in N2B settings.#{COLOR_RESET}"
+            puts ""
+            puts "To set up GitHub integration, run:"
+            puts "  #{COLOR_BLUE}n2b --advanced-config#{COLOR_RESET}"
+            puts ""
+            puts "You'll need:"
+            puts "  • GitHub repository (owner/repo format)"
+            puts "  • GitHub access token (generate at: https://github.com/settings/tokens)"
+            puts ""
             puts "Proceeding with diff analysis without GitHub issue details."
           end
         when 'jira'
@@ -297,8 +304,22 @@ module N2B
               puts "Proceeding with diff analysis without Jira ticket details."
             end
           else
-            puts "Jira configuration is missing or incomplete in N2B settings."
-            puts "Please configure Jira using 'n2b -c' (or main n2b config) to fetch ticket details."
+            puts "#{COLOR_YELLOW}⚠️  Jira configuration is missing or incomplete in N2B settings.#{COLOR_RESET}"
+            puts ""
+            puts "To set up Jira integration, run:"
+            puts "  #{COLOR_BLUE}n2b --advanced-config#{COLOR_RESET}"
+            puts ""
+            puts "You'll need:"
+            puts "  • Jira domain (e.g., your-company.atlassian.net)"
+            puts "  • Your email address"
+            puts "  • Jira API token (generate at: https://id.atlassian.com/manage-profile/security/api-tokens)"
+            puts ""
+            puts "Required permissions for the API token:"
+            puts "  • read:project:jira"
+            puts "  • read:issue:jira"
+            puts "  • read:comment:jira"
+            puts "  • write:comment:jira"
+            puts ""
             puts "Proceeding with diff analysis without Jira ticket details."
           end
         end
@@ -340,7 +361,25 @@ module N2B
 
         # Determine if we should proceed with update based on ticket_update_flag
         proceed_with_update_action = false
-        if ticket_update_flag == true # --update
+
+        # First check if the service is actually configured before asking
+        service_configured = case tracker_service_name
+                            when 'jira'
+                              config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
+                            when 'github'
+                              config['github'] && config['github']['repo'] && config['github']['access_token']
+                            else
+                              false
+                            end
+
+        if !service_configured
+          puts "\n#{COLOR_YELLOW}Note: #{tracker_service_name.capitalize} is not configured, so ticket update is not available.#{COLOR_RESET}"
+          if tracker_service_name == 'jira'
+            puts "Run 'n2b --advanced-config' to set up Jira integration."
+          elsif tracker_service_name == 'github'
+            puts "Run 'n2b --advanced-config' to set up GitHub integration."
+          end
+        elsif ticket_update_flag == true # --update
           proceed_with_update_action = true
         elsif ticket_update_flag.nil? # Ask user
           puts "\nWould you like to update #{tracker_service_name.capitalize} issue #{ticket_input} with this analysis? (y/n)"
@@ -366,7 +405,8 @@ module N2B
                 puts "Error updating GitHub issue: #{e.message}"
               end
             else
-              puts "GitHub configuration is missing. Cannot update GitHub issue."
+              puts "#{COLOR_RED}❌ GitHub configuration is missing. Cannot update GitHub issue.#{COLOR_RESET}"
+              puts "Run 'n2b --advanced-config' to set up GitHub integration."
             end
           when 'jira'
             if config['jira'] && config['jira']['domain'] && config['jira']['email'] && config['jira']['api_key']
@@ -388,7 +428,8 @@ module N2B
                 puts "An unexpected error occurred while updating Jira ticket: #{e.message}"
               end
             else
-              puts "Jira configuration is missing. Cannot update Jira ticket."
+              puts "#{COLOR_RED}❌ Jira configuration is missing. Cannot update Jira ticket.#{COLOR_RESET}"
+              puts "Run 'n2b --advanced-config' to set up Jira integration."
             end
           end
         else

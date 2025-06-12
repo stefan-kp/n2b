@@ -161,4 +161,78 @@ class TestBase < Minitest::Test
     assert_nil saved_config.dig('editor', 'command')
   end
 
+  def test_normal_config_shows_advanced_features_tip
+    # Test that normal configuration shows the tip about advanced features
+    # when user is NOT prompted for advanced settings (existing config, not first time)
+
+    # First, create an existing config to avoid first-time setup
+    config_file_path = N2B::Base.config_file
+    FileUtils.mkdir_p(File.dirname(config_file_path))
+    existing_config = {
+      'llm' => 'claude',
+      'model' => 'claude-3-sonnet',
+      'access_key' => 'existing-key'
+    }
+    File.write(config_file_path, existing_config.to_yaml)
+
+    # Now reconfigure with advanced_flow: false (should not prompt for advanced)
+    inputs = ['claude', 'test-api-key', 'claude-3-sonnet'] # LLM, API key, model
+
+    config = nil
+    output = nil
+    $stdin.stub :gets, lambda { inputs.shift || "\n" } do
+      output = capture_io do
+        config = @base.get_config(reconfigure: true, advanced_flow: false)
+      end
+    end
+
+    output_text = output[0] # stdout
+
+    # Should show the tip about advanced features when not prompted for advanced
+    assert_match /💡 Tip: Run 'n2b --advanced-config'/, output_text
+    assert_match /Jira integration for ticket analysis/, output_text
+    assert_match /GitHub integration for issue tracking/, output_text
+    assert_match /AI-powered merge conflict resolution/, output_text
+  end
+
+  def test_advanced_config_does_not_show_tip
+    # Test that advanced configuration flow does NOT show the tip (since user is already in advanced mode)
+    inputs = ['claude', 'test-api-key', 'claude-3-sonnet', 'y', 'none', 'false', 'false', 'false', 'false'] # Advanced flow
+
+    config = nil
+    output = nil
+    $stdin.stub :gets, lambda { inputs.shift || "\n" } do
+      output = capture_io do
+        config = @base.get_config(reconfigure: true, advanced_flow: true)
+      end
+    end
+
+    output_text = output[0] # stdout
+
+    # Should NOT show the tip about advanced features (user is already in advanced mode)
+    refute_match /💡 Tip: Run 'n2b --advanced-config'/, output_text
+  end
+
+  def test_first_time_setup_does_not_show_tip
+    # Test that first-time setup (which automatically prompts for advanced) does NOT show tip
+    inputs = ['claude', 'test-api-key', 'claude-3-sonnet', 'y', 'none', 'false', 'false', 'false', 'false'] # First time with advanced
+
+    # Ensure no existing config to simulate first-time setup
+    config_file_path = N2B::Base.config_file
+    FileUtils.rm_f(config_file_path) if File.exist?(config_file_path)
+
+    config = nil
+    output = nil
+    $stdin.stub :gets, lambda { inputs.shift || "\n" } do
+      output = capture_io do
+        config = @base.get_config(reconfigure: true) # First time setup
+      end
+    end
+
+    output_text = output[0] # stdout
+
+    # Should NOT show the tip (first-time setup automatically goes to advanced)
+    refute_match /💡 Tip: Run 'n2b --advanced-config'/, output_text
+  end
+
 end
